@@ -62,6 +62,26 @@ export class ChatRelay {
         console.log(`[ChatRelay] Skipping command or empty message: ${msg.text}`);
         return;
       }
+      
+      // Additional check: Skip short numeric responses that are likely flow inputs
+      // (like "6", "7", etc. that are answers to questions)
+      if (/^\d+$/.test(msg.text.trim()) && msg.text.trim().length <= 3) {
+        console.log(`[ChatRelay] Skipping likely flow input: ${msg.text}`);
+        return;
+      }
+      
+      // Skip common flow responses that are clearly not general chat
+      const flowPatterns = [
+        /^\d+$/, // Single numbers
+        /^[yn]$/i, // Yes/no single letters
+        /^[αβγδεζηθικλμνξοπρστυφχψως]$/i, // Greek letters (common in flows)
+        /^(yes|no|ναι|όχι)$/i, // Yes/no in different languages
+      ];
+      
+      if (flowPatterns.some(pattern => pattern.test(msg.text.trim()))) {
+        console.log(`[ChatRelay] Skipping flow pattern response: ${msg.text}`);
+        return;
+      }
 
       const name = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim() || msg.from.username || 'User';
       const forwardText = `📩 ${name} (${fromId}) wrote:\n${msg.text}`;

@@ -151,7 +151,27 @@ export class CandidateStep1Flow {
     });
 
     this.bot.on('message', async (msg) => {
-      if (!msg.from || !this.sessions.has(msg.from.id)) return;
+      if (!msg.from) return;
+      
+      // If user doesn't have a session but sends a message that looks like a flow response,
+      // create a session to prevent ChatRelay from forwarding it
+      if (!this.sessions.has(msg.from.id)) {
+        const flowResponsePatterns = [
+          /^\d+$/, // Single numbers
+          /^[yn]$/i, // Yes/no single letters
+          /^[αβγδεζηθικλμνξοπρστυφχψως]$/i, // Greek letters
+          /^(yes|no|ναι|όχι)$/i, // Yes/no in different languages
+        ];
+        
+        if (flowResponsePatterns.some(pattern => pattern.test(msg.text?.trim() || ''))) {
+          console.log(`[CandidateFlow] Creating session for user ${msg.from.id} to prevent ChatRelay forwarding`);
+          this.sessions.set(msg.from.id, { lang: 'en', answers: {}, step: -1 });
+          // Don't process the message further - just prevent forwarding
+          return;
+        }
+        return; // No session and not a flow response
+      }
+      
       const session = this.sessions.get(msg.from.id)!;
       // Ignore /start and callback_query
       if (msg.text && !msg.text.startsWith('/')) {

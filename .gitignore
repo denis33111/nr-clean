@@ -130,4 +130,7 @@ telegram_bot_token.txt
 
 # Secrets and credentials
 SECRETS/
-*.json 
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json 
