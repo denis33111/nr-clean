@@ -48,7 +48,11 @@ export class ChatRelay {
         return; // skip admin messages
       }
       
-      if (!msg.text) return; // only handle text for now
+      // Only forward actual text messages, not commands or empty messages
+      if (!msg.text || msg.text.startsWith('/') || msg.text.trim() === '') {
+        console.log(`[ChatRelay] Skipping command or empty message: ${msg.text}`);
+        return;
+      }
 
       const name = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim() || msg.from.username || 'User';
       const forwardText = `📩 ${name} (${fromId}) wrote:\n${msg.text}`;
