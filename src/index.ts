@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import express from 'express';
 import { Bot } from './bot/Bot';
 import { Logger } from './utils/Logger';
 import { Database } from './database/Database';
@@ -20,6 +21,29 @@ process.on('unhandledRejection', (reason) => {
 
 async function main() {
   try {
+    // Initialize Express server to satisfy Render's port requirement
+    const app = express();
+    const port = process.env.PORT || 3000;
+    
+    // Simple health check endpoint
+    app.get('/', (req, res) => {
+      res.json({ 
+        status: 'ok', 
+        service: 'Telegram Candidate Bot',
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      res.json({ status: 'healthy' });
+    });
+    
+    // Start the Express server
+    app.listen(port, () => {
+      console.log(`Express server listening on port ${port}`);
+    });
+
     // Initialize logger
     const logger = new Logger();
     logger.info('Starting Telegram Bot...');
