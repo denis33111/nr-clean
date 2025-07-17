@@ -1,5 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { AdminService } from '../services/AdminService';
+import { candidateSessions } from './CandidateStep1Flow';
+import { adminSessions } from './AdminStep2Flow';
+import { courseSessions } from './CandidateCourseFlow';
 
 /**
  * ChatRelay forwards incoming user DMs to a designated admin group and allows
@@ -46,6 +49,12 @@ export class ChatRelay {
       if (await this.adminService.isAdmin(fromId)) {
         console.log(`[ChatRelay] Skipping admin message from ${fromId}`);
         return; // skip admin messages
+      }
+      
+      // Skip if user is in any active flow
+      if (candidateSessions.has(fromId) || adminSessions.has(fromId) || courseSessions.has(fromId)) {
+        console.log(`[ChatRelay] Skipping message from user ${fromId} - user is in active flow`);
+        return;
       }
       
       // Only forward actual text messages, not commands or empty messages

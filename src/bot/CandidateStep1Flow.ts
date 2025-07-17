@@ -266,14 +266,26 @@ export class CandidateStep1Flow {
       .split(',')
       .map((id) => parseInt(id.trim(), 10))
       .filter((n) => !isNaN(n));
+    
+    console.log(`[DEBUG] Admin notification - ADMIN_IDS env: ${process.env.ADMIN_IDS}`);
+    console.log(`[DEBUG] Admin notification - parsed adminIds:`, adminIds);
+    
     const inlineBtn = { text: session.lang === 'en' ? 'Start evaluation' : 'Ξεκινήστε αξιολόγηση', callback_data: `step2_${rowIndex}` };
     const notifyText = session.lang === 'en'
       ? `🆕 Candidate ready for Step-2: ${session.answers['NAME'] || ''}`
       : `🆕 Υποψήφιος για Βήμα-2: ${session.answers['NAME'] || ''}`;
+    
+    console.log(`[DEBUG] Admin notification - sending to adminIds:`, adminIds);
+    console.log(`[DEBUG] Admin notification - text: ${notifyText}`);
+    
     for (const adminId of adminIds) {
       try {
+        console.log(`[DEBUG] Admin notification - sending to adminId: ${adminId}`);
         await this.bot.sendMessage(adminId, notifyText, { reply_markup: { inline_keyboard: [[inlineBtn]] } });
-      } catch (_) { /* ignore failures */ }
+        console.log(`[DEBUG] Admin notification - sent successfully to ${adminId}`);
+      } catch (error) { 
+        console.error(`[DEBUG] Admin notification - failed to send to ${adminId}:`, error);
+      }
     }
 
     // --- Send interview & document instructions to candidate ---
