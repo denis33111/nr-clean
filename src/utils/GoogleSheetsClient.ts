@@ -6,11 +6,22 @@ export class GoogleSheetsClient {
   private sheets: sheets_v4.Sheets;
   private spreadsheetId: string;
 
-  constructor(spreadsheetId: string, keyFilePath: string) {
-    const auth = new google.auth.GoogleAuth({
-      keyFile: keyFilePath,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
+  constructor(spreadsheetId: string, keyFilePathOrJson: string) {
+    let auth;
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      // Use credentials from environment variable
+      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+    } else {
+      // Fallback to file path
+      auth = new google.auth.GoogleAuth({
+        keyFile: keyFilePathOrJson,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+    }
     this.sheets = google.sheets({ version: 'v4', auth });
     this.spreadsheetId = spreadsheetId;
   }
