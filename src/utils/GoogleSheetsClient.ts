@@ -8,12 +8,12 @@ export class GoogleSheetsClient {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private cacheTimeout = 30000; // 30 seconds cache
 
-  constructor(spreadsheetId: string, keyFilePath: string) {
+  constructor(spreadsheetId: string, credentials: any) {
     this.spreadsheetId = spreadsheetId;
     this.sheets = google.sheets({ 
       version: 'v4', 
       auth: new google.auth.GoogleAuth({
-        keyFile: keyFilePath,
+        credentials: credentials,
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
       })
     });
