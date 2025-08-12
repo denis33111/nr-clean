@@ -579,7 +579,7 @@ export class CandidateStep1Flow {
     // Friendly field labels for edit buttons
     const LABELS: Record<'en' | 'gr', Record<string, string>> = {
       en: {
-        NAME: 'Name',
+        NAME: 'Full Name',
         AGE: 'Age',
         ADRESS: 'Address',
         PHONE: 'Phone',
@@ -589,7 +589,7 @@ export class CandidateStep1Flow {
         DRIVING_LICENSE: 'Driving licence'
       },
       gr: {
-        NAME: 'Όνομα',
+        NAME: 'Πλήρες Όνομα',
         AGE: 'Ηλικία',
         ADRESS: 'Διεύθυνση',
         PHONE: 'Τηλέφωνο',
