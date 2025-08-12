@@ -85,6 +85,9 @@ export class CommandHandler {
         case '/addadmin':
           await this.handleAddAdmin(msg, args);
           break;
+        case '/makeadmin':
+          await this.handleMakeAdmin(msg, args);
+          break;
         default:
           // Allow other flows to handle step2-related commands
           if (command === '/pending2' || command.startsWith('/step2_')) {
@@ -385,7 +388,7 @@ If you need help, contact the bot administrator.
     }
 
     // Check if user is admin
-    const isAdmin = await this.adminService.isAdmin(userId);
+    const isAdmin = await this.adminService.isAdmin(userId, chatId, this.bot);
     if (!isAdmin) {
       await this.bot.sendMessage(chatId, '❌ Access denied. Admin privileges required.');
       return;
@@ -543,7 +546,7 @@ Last Active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'N
     }
 
     // Check if user is already admin (first admin can add others)
-    const isAdmin = await this.adminService.isAdmin(userId);
+    const isAdmin = await this.adminService.isAdmin(userId, chatId, this.bot);
     if (!isAdmin) {
       // Check if there are any admins at all
       const admins = await this.adminService.getAdmins();
@@ -575,6 +578,23 @@ Last Active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'N
     } catch (error) {
       this.logger.error('Error adding admin:', error);
       await this.bot.sendMessage(chatId, 'Error adding admin user.');
+    }
+  }
+
+  private async handleMakeAdmin(msg: TelegramBot.Message, args: string[]): Promise<void> {
+    const chatId = msg.chat.id;
+    const userId = msg.from!.id;
+
+    // Check if there are any admins at all
+    const admins = await this.adminService.getAdmins();
+    if (admins.length === 0) {
+      // No admins exist, allow this user to become the first admin
+      await this.adminService.addAdmin(userId, ['owner']);
+      await this.bot.sendMessage(chatId, `✅ You have been added as the first admin (owner). You can now test admin features!`);
+      return;
+    } else {
+      await this.bot.sendMessage(chatId, `❌ Admins already exist. Use /addadmin in a group chat instead.`);
+      return;
     }
   }
 } 
