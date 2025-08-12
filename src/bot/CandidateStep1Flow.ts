@@ -4,7 +4,8 @@ import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 import PDFDocument from 'pdfkit';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore – get-stream default export with .buffer helper
-import getStream from 'get-stream';
+// Using dynamic import for ES Module compatibility
+let getStream: any;
 import fs from 'fs';
 import { courseSessions } from './CandidateCourseFlow';
 
@@ -554,10 +555,16 @@ export class CandidateStep1Flow {
     const doc = new PDFDocument({ margin: 40 });
     doc.fontSize(12).text(text, { align: 'left' });
     doc.end();
+    
+    // Dynamic import for ES Module compatibility
+    if (!getStream) {
+      getStream = await import('get-stream');
+    }
+    
     // pdfkit emits readable stream; convert to buffer
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore – .buffer exists at runtime although not in typings
-    const buffer = await getStream.buffer(doc);
+    const buffer = await getStream.default.buffer(doc);
     return buffer;
   }
 
