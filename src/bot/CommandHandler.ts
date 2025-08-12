@@ -3,6 +3,7 @@ import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
 import { UserService } from '../services/UserService';
 import { AdminService } from '../services/AdminService';
+import { MessageHandler } from './MessageHandler';
 
 export class CommandHandler {
   private bot: TelegramBot;
@@ -10,6 +11,7 @@ export class CommandHandler {
   private logger: Logger;
   private userService: UserService;
   private adminService: AdminService;
+  private messageHandler: any; // Assuming MessageHandler is imported and available
 
   constructor(bot: TelegramBot, database: Database, logger: Logger) {
     this.bot = bot;
@@ -17,6 +19,7 @@ export class CommandHandler {
     this.logger = logger;
     this.userService = new UserService(database);
     this.adminService = new AdminService(database);
+    this.messageHandler = new MessageHandler(bot, database, logger);
   }
 
   async handleCommand(msg: TelegramBot.Message | undefined): Promise<void> {
@@ -30,21 +33,51 @@ export class CommandHandler {
     const args = text.split(' ').slice(1);
     const userId = msg.from.id;
     const chatId = msg.chat.id;
-    this.logger.info(`Command received: ${command} from user ${userId}`);
+    const chatType = msg.chat.type;
+    
+    this.logger.info(`Command received: ${command} from user ${userId} in ${chatType} chat`);
+    
     try {
+      // Check if user has working status first
+      const userStatus = await this.messageHandler.getUserStatus(userId);
+      const isWorkingUser = userStatus && userStatus.status.toLowerCase() === 'working';
+      
       switch (command) {
         case '/start':
-          // The CandidateStep1Flow handles /start by itself (language selection etc.).
-          // Suppress generic welcome message to avoid duplicate responses.
-          return; // do nothing here
+          // Handle /start based on chat type
+          if (chatType === 'private') {
+            // Private chat: Let CandidateStep1Flow handle it completely
+            // We don't do anything here to avoid duplication
+            return;
+          } else if (chatType === 'group' || chatType === 'supergroup') {
+            // Group chat: Handle admin start command
+            await this.handleAdminStart(msg);
+            return;
+          }
+          break;
+        case '/contact':
+          await this.handleContact(msg);
+          break;
         case '/help':
-          await this.handleHelp(msg);
+          if (isWorkingUser) {
+            await this.handleWorkingUserHelp(msg);
+          } else {
+            await this.handleHelp(msg);
+          }
           break;
         case '/settings':
-          await this.handleSettings(msg);
+          if (isWorkingUser) {
+            await this.handleWorkingUserSettings(msg);
+          } else {
+            await this.handleSettings(msg);
+          }
           break;
         case '/stats':
-          await this.handleStats(msg);
+          if (isWorkingUser) {
+            await this.handleWorkingUserStats(msg);
+          } else {
+            await this.handleStats(msg);
+          }
           break;
         case '/admin':
           await this.handleAdmin(msg, args);
@@ -54,7 +87,11 @@ export class CommandHandler {
           if (command === '/pending2' || command.startsWith('/step2_')) {
             return;
           }
-          await this.bot.sendMessage(chatId, 'Unknown command. Use /help to see available commands.');
+          if (isWorkingUser) {
+            await this.handleWorkingUserUnknownCommand(msg);
+          } else {
+            await this.bot.sendMessage(chatId, 'Unknown command. Use /help to see available commands.');
+          }
       }
     } catch (error) {
       this.logger.error(`Error handling command ${command}:`, error);
@@ -91,6 +128,39 @@ I'm here to help you with various tasks. Here's what I can do:
 💡 Just send me a message or use any of the commands above to get started!
 
 Need help? Use /help for more information.
+    `.trim();
+
+    await this.bot.sendMessage(chatId, welcomeMessage);
+  }
+
+  private async handleAdminStart(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const user = msg.from!;
+
+    // Register or update user
+    await this.userService.registerUser({
+      id: user.id,
+      username: user.username || '',
+      firstName: user.first_name,
+      lastName: user.last_name || '',
+      isBot: user.is_bot,
+      languageCode: user.language_code || ''
+    });
+
+    const welcomeMessage = `
+🎉 Welcome to the Admin Panel!
+
+This is the admin group where you can:
+• Review candidate applications
+• Manage evaluations
+• Access admin commands
+
+📋 Available Commands:
+• /admin - Admin panel
+• /help - Show help information
+• /stats - View statistics
+
+💡 Use /admin to access admin features.
     `.trim();
 
     await this.bot.sendMessage(chatId, welcomeMessage);
@@ -187,28 +257,129 @@ If you need help, contact the bot administrator.
     const statsMessage = `
 📊 Your Statistics
 
-👤 User Activity:
-• Total messages: ${user.messageCount || 0}
+👤 User Info:
+• ID: ${user.id}
+• Username: ${user.username || 'Not set'}
+• Name: ${user.firstName} ${user.lastName || ''}
+• Language: ${user.languageCode || 'Not set'}
+
+📈 Activity:
+• Messages sent: ${user.messageCount || 0}
 • Commands used: ${user.commandCount || 0}
-• Registration date: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
 • Last active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'Never'}
 
-📈 Usage Summary:
-• Most used command: ${user.mostUsedCommand || 'None'}
-• Average messages per day: ${this.calculateAverageMessages(user) || 0}
-
-🎯 Achievements:
-• First message: ${user.messageCount && user.messageCount > 0 ? '✅' : '❌'}
-• Regular user: ${user.messageCount && user.messageCount > 10 ? '✅' : '❌'}
-• Power user: ${user.messageCount && user.messageCount > 50 ? '✅' : '❌'}
+🎯 Most Used Command: ${user.mostUsedCommand || 'None'}
     `.trim();
 
     await this.bot.sendMessage(chatId, statsMessage);
   }
 
+  private async handleContact(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userId = msg.from!.id;
+
+    // Check if user is registered
+    const user = await this.userService.getUser(userId);
+    if (!user) {
+      await this.bot.sendMessage(chatId, 'Please use /start first to register.');
+      return;
+    }
+
+    // Start contact flow using MessageHandler
+    await this.messageHandler.startContactFlow(chatId, userId);
+  }
+
+  private async handleWorkingUserHelp(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userLang = await this.messageHandler.getUserLanguage(msg.from!.id);
+    
+    const helpMessage = userLang === 'gr'
+      ? `👋 Γεια σας! Είστε εγγεγραμμένος εργαζόμενος.
+
+📋 Διαθέσιμες εντολές:
+• /start - Επιστροφή στην αρχική σελίδα
+• /contact - Επικοινωνία με την ομάδα
+
+💡 Συμβουλή: Απλά στείλτε ένα μήνυμα για να κάνετε check-in!`
+      : `👋 Hello! You are a registered employee.
+
+📋 Available commands:
+• /start - Return to main page
+• /contact - Contact the team
+
+💡 Tip: Just send a message to check in!`;
+    
+    await this.bot.sendMessage(chatId, helpMessage);
+  }
+
+  private async handleWorkingUserSettings(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userLang = await this.messageHandler.getUserLanguage(msg.from!.id);
+    
+    const settingsMessage = userLang === 'gr'
+      ? `⚙️ Ρυθμίσεις για εργαζόμενους
+
+🔒 Οι ρυθμίσεις σας διατηρούνται από την ομάδα HR.
+📞 Για αλλαγές, επικοινωνήστε με την ομάδα μέσω /contact.`
+      : `⚙️ Settings for employees
+
+🔒 Your settings are maintained by the HR team.
+📞 For changes, contact the team via /contact.`;
+    
+    await this.bot.sendMessage(chatId, settingsMessage);
+  }
+
+  private async handleWorkingUserStats(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userLang = await this.messageHandler.getUserLanguage(msg.from!.id);
+    
+    const statsMessage = userLang === 'gr'
+      ? `📊 Στατιστικά εργαζόμενου
+
+✅ Κατάσταση: Εργαζόμενος
+📅 Ημερομηνία εγγραφής: Διατηρείται από HR
+📞 Επικοινωνία: /contact`
+      : `📊 Employee statistics
+
+✅ Status: Employee
+📅 Registration date: Maintained by HR
+📞 Contact: /contact`;
+    
+    await this.bot.sendMessage(chatId, statsMessage);
+  }
+
+  private async handleWorkingUserUnknownCommand(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userLang = await this.messageHandler.getUserLanguage(msg.from!.id);
+    
+    const unknownMessage = userLang === 'gr'
+      ? `❓ Άγνωστη εντολή.
+
+📋 Διαθέσιμες εντολές:
+• /start - Επιστροφή στην αρχική σελίδα
+• /contact - Επικοινωνία με την ομάδα
+
+💡 Συμβουλή: Απλά στείλτε ένα μήνυμα για να κάνετε check-in!`
+      : `❓ Unknown command.
+
+📋 Available commands:
+• /start - Return to main page
+• /contact - Contact the team
+
+💡 Tip: Just send a message to check in!`;
+    
+    await this.bot.sendMessage(chatId, unknownMessage);
+  }
+
   private async handleAdmin(msg: TelegramBot.Message, args: string[]): Promise<void> {
     const chatId = msg.chat.id;
     const userId = msg.from!.id;
+
+    // Only allow admin commands in group chats, not private chats
+    if (msg.chat.type === 'private') {
+      await this.bot.sendMessage(chatId, '❌ Admin commands can only be used in group chats.');
+      return;
+    }
 
     // Check if user is admin
     const isAdmin = await this.adminService.isAdmin(userId);

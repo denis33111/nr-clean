@@ -9,7 +9,6 @@ import { AdminStep2Flow } from './bot/AdminStep2Flow';
 import { CandidateCourseFlow } from './bot/CandidateCourseFlow';
 import { ReminderService } from './services/ReminderService';
 import { AdminService } from './services/AdminService';
-import { ChatRelay } from './bot/ChatRelay';
 
 // Load environment variables
 dotenv.config();
@@ -17,6 +16,12 @@ dotenv.config();
 // Log and ignore unhandled promise rejections so transient network errors don't crash the bot
 process.on('unhandledRejection', (reason) => {
   console.error('[warn] Unhandled promise rejection:', reason);
+});
+
+// Log unhandled exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[ERROR] Uncaught exception:', error);
+  process.exit(1);
 });
 
 async function main() {
@@ -54,31 +59,45 @@ async function main() {
     logger.info('Database initialized successfully');
 
     // Initialize and start bot
+    console.log('[DEBUG] Creating Bot instance...');
     const bot = new Bot(database, logger);
+    console.log('[DEBUG] Bot instance created successfully');
+    console.log('[DEBUG] Starting bot...');
     await bot.start();
+    console.log('[DEBUG] Bot started successfully');
     logger.info('Bot started successfully');
 
     // Initialize Google Sheets client
-    const spreadsheetId = process.env.SHEET_ID || 'YOUR_SHEET_ID_HERE';
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || process.env.SHEET_ID || 'YOUR_SHEET_ID_HERE';
     const keyFilePath = process.env.SHEET_KEY_PATH || './secrets/google-service-account.json';
+    console.log(`[DEBUG] Initializing Google Sheets with ID: ${spreadsheetId}`);
+    console.log(`[DEBUG] Using key file: ${keyFilePath}`);
     const sheetsClient = new GoogleSheetsClient(spreadsheetId, keyFilePath);
+    console.log('[DEBUG] Google Sheets client initialized successfully');
 
     // Initialize candidate Step 1 flow
+    console.log('[DEBUG] Initializing CandidateStep1Flow...');
     new CandidateStep1Flow((bot as any).bot, sheetsClient);
+    console.log('[DEBUG] CandidateStep1Flow initialized successfully');
 
-    // Initialize admin Step 2 flow
-    new AdminStep2Flow((bot as any).bot, sheetsClient, database);
+    // Initialize ReminderService ONCE
+    const reminderService = new ReminderService((bot as any).bot, sheetsClient);
+
+    // Initialize AdminStep2Flow ONCE
+    const adminStep2Flow = new AdminStep2Flow((bot as any).bot, sheetsClient, database);
+    adminStep2Flow.setReminderService(reminderService);
+    adminStep2Flow.setupHandlers(); // Set up handlers after reminder service is set
+
+    console.log('[DEBUG] AdminStep2Flow initialized with reminder service');
 
     // Initialize candidate course answer flow (Step 3 interactions)
+    console.log('[DEBUG] Initializing CandidateCourseFlow...');
     new CandidateCourseFlow((bot as any).bot, sheetsClient);
+    console.log('[DEBUG] CandidateCourseFlow initialized successfully');
 
-    // Forward user DMs to admin group with reply support
-    // Requires ADMIN_GROUP_ID env variable
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    new ChatRelay((bot as any).bot, new AdminService(database));
+    // AdminStep2Flow handles its own callbacks through setupHandlers()
 
-    // Daily reminder scheduler (day-before course)
-    new ReminderService((bot as any).bot, sheetsClient);
+    console.log('[DEBUG] All services initialized successfully!');
 
   } catch (error) {
     console.error('Failed to start bot:', error);

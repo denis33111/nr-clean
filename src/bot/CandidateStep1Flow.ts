@@ -6,6 +6,7 @@ import PDFDocument from 'pdfkit';
 // @ts-ignore – get-stream default export with .buffer helper
 import getStream from 'get-stream';
 import fs from 'fs';
+import { courseSessions } from './CandidateCourseFlow';
 
 const SHEET_RANGE = 'A2:G1000'; // Adjust as needed
 const SHEET_HEADER = [
@@ -51,36 +52,200 @@ export interface CandidateSession {
   editingKey?: string;
   // Flag to indicate the session is in review mode (all questions answered)
   reviewing?: boolean;
+  // Flag to indicate the user is awaiting custom date input
+  awaitingCustomDate?: boolean;
+  // Timestamp of the last activity in the session
+  lastActivity: number;
 }
 
 // Export the singleton sessions map so other parts of the bot (e.g., MessageHandler)
 // can check whether a user is currently inside the Step-1 hiring flow.
 export const candidateSessions: Map<number, CandidateSession> = new Map();
+export const processingUsers: Set<number> = new Set(); // Track users being processed
 
 export class CandidateStep1Flow {
   private bot: TelegramBot;
   private sheets: GoogleSheetsClient;
-  // Re-use the shared map reference above
   private sessions = candidateSessions;
 
   constructor(bot: TelegramBot, sheets: GoogleSheetsClient) {
     this.bot = bot;
     this.sheets = sheets;
     this.setupHandlers();
+    this.setupSessionCleanup();
+  }
+
+  // Setup session cleanup to prevent memory leaks
+  private setupSessionCleanup(): void {
+    // Clean up expired sessions every 10 minutes
+    setInterval(() => {
+      const now = Date.now();
+      const sessionTTL = 30 * 60 * 1000; // 30 minutes TTL
+      let cleanedCount = 0;
+      
+      for (const [userId, session] of this.sessions) {
+        // Check if session is too old (no activity for 30 minutes)
+        const lastActivity = session.lastActivity || 0;
+        if (now - lastActivity > sessionTTL) {
+          this.sessions.delete(userId);
+          cleanedCount++;
+        }
+      }
+      
+      if (cleanedCount > 0) {
+        console.log(`[CandidateStep1Flow] Memory cleanup: Removed ${cleanedCount} expired sessions`);
+      }
+      
+      // Log session count for monitoring
+      if (this.sessions.size > 0) {
+        console.log(`[CandidateStep1Flow] Active sessions: ${this.sessions.size}`);
+      }
+    }, 10 * 60 * 1000); // Every 10 minutes
+  }
+
+  // Helper method to get user's language from Google Sheets
+  private async getUserLanguage(userId: number): Promise<'en' | 'gr'> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) return 'en';
+      
+      const rows = rowsRaw as string[][];
+      
+      // Column B for user ID, find language column
+      const userIdCol = 1; // Column B (0-indexed = 1)
+      const langCol = header.findIndex(h => {
+        const norm = h.toUpperCase().replace(/\s|_/g, '');
+        return norm === 'LANG' || norm === 'LANGUAGE';
+      });
+      
+      if (langCol === -1) return 'en';
+      
+      for (const row of rows) {
+        if (!row[userIdCol]) continue;
+        
+        const rowUserId = parseInt(row[userIdCol] || '', 10);
+        if (rowUserId === userId) {
+          const langVal = (row[langCol] || '').toLowerCase();
+          return langVal.startsWith('gr') ? 'gr' : 'en';
+        }
+      }
+      
+      return 'en';
+    } catch (error) {
+      console.error('[CandidateStep1Flow] Error getting user language:', error);
+      return 'en';
+    }
+  }
+
+  // Helper method to check if user has "working" status
+  private async getUserStatus(userId: number): Promise<{ status: string; name: string } | null> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) return null;
+      
+      const rows = rowsRaw as string[][];
+      
+      // Column B for user ID, find status and name columns
+      const userIdCol = 1; // Column B (0-indexed = 1)
+      const statusCol = header.findIndex(h => {
+        const norm = h.toUpperCase().replace(/\s|_/g, '');
+        return norm === 'STEP' || norm === 'STATUS';
+      });
+      const nameCol = header.findIndex(h => {
+        const norm = h.toUpperCase().replace(/\s|_/g, '');
+        return norm === 'NAME';
+      });
+      
+      if (statusCol === -1 || nameCol === -1) return null;
+      
+      for (const row of rows) {
+        if (!row[userIdCol]) continue;
+        
+        const rowUserId = parseInt(row[userIdCol] || '', 10);
+        if (rowUserId === userId) {
+          return {
+            status: (row[statusCol] || '').trim(),
+            name: (row[nameCol] || '').trim()
+          };
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[CandidateStep1Flow] Error getting user status:', error);
+      return null;
+    }
   }
 
   private setupHandlers() {
     this.bot.onText(/\/start/, async (msg) => {
-      this.sessions.set(msg.from!.id, { lang: 'en', answers: {}, step: -1 });
-      await this.askLanguage(msg.chat.id);
+      const startTime = Date.now();
+      console.log(`[CandidateStep1Flow] /start command received at ${new Date().toISOString()}`);
+      
+      // Only allow in private chats, not group chats
+      if (msg.chat.type !== 'private') return;
+      
+      const userId = msg.from!.id;
+      console.log(`[CandidateStep1Flow] Processing user ${userId} at ${new Date().toISOString()}`);
+      
+      // Check if user is already being processed
+      if (processingUsers.has(userId)) {
+        console.log(`[CandidateStep1Flow] User ${userId} already being processed, skipping`);
+        return;
+      }
+      
+      // Mark user as being processed
+      processingUsers.add(userId);
+      console.log(`[CandidateStep1Flow] User ${userId} marked as processing`);
+      
+      try {
+        // Check if user already has "working" status
+        console.log(`[CandidateStep1Flow] Checking user status at ${new Date().toISOString()}`);
+        const userStatus = await this.getUserStatus(userId);
+        console.log(`[CandidateStep1Flow] User status result:`, userStatus);
+        
+        if (userStatus && userStatus.status.toLowerCase() === 'working') {
+          console.log(`[CandidateStep1Flow] User is working, showing main menu at ${new Date().toISOString()}`);
+          // User is already working, show working user main menu
+          const { MessageHandler } = await import('./MessageHandler');
+          const { Database } = await import('../database/Database');
+          const { Logger } = await import('../utils/Logger');
+          const database = new Database();
+          const logger = new Logger();
+          const messageHandler = new MessageHandler(this.bot, database, logger);
+          await messageHandler.showWorkingUserMainMenu(msg.chat.id, userId, userStatus.name);
+          console.log(`[CandidateStep1Flow] Main menu sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
+          return;
+        }
+        
+        console.log(`[CandidateStep1Flow] Starting application flow at ${new Date().toISOString()}`);
+        // Clear any existing course session to prevent conflicts
+        courseSessions.delete(msg.from!.id);
+        
+        this.sessions.set(msg.from!.id, { lang: 'en', answers: {}, step: -1, lastActivity: Date.now() });
+        await this.askLanguage(msg.chat.id);
+        console.log(`[CandidateStep1Flow] Language question sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
+      } catch (error) {
+        console.error('[CandidateStep1Flow] Error checking user status:', error);
+        // Continue with application flow if there's an error
+      } finally {
+        // Always remove user from processing set
+        processingUsers.delete(userId);
+        console.log(`[CandidateStep1Flow] User ${userId} removed from processing`);
+      }
     });
 
     this.bot.on('callback_query', async (query) => {
       if (!query.data || !query.from) return;
+      // Only allow in private chats, not group chats
+      if (query.message?.chat.type !== 'private') return;
+      
       const userId = query.from.id;
       if (query.data === 'lang_en' || query.data === 'lang_gr') {
         const lang = query.data === 'lang_en' ? 'en' : 'gr';
-        this.sessions.set(userId, { lang, answers: {}, step: 0 });
+        this.sessions.set(userId, { lang, answers: {}, step: 0, lastActivity: Date.now() });
         await this.askNext(userId, query.message!.chat.id);
         await this.bot.answerCallbackQuery(query.id);
         return;
@@ -151,49 +316,34 @@ export class CandidateStep1Flow {
     });
 
     this.bot.on('message', async (msg) => {
-      if (!msg.from) return;
+      if (!msg.text || !msg.from) return;
+      // Only allow in private chats, not group chats
+      if (msg.chat.type !== 'private') return;
       
-      // If user doesn't have a session but sends a message that looks like a flow response,
-      // create a session to prevent ChatRelay from forwarding it
-      if (!this.sessions.has(msg.from.id)) {
-        const flowResponsePatterns = [
-          /^\d+$/, // Single numbers
-          /^[yn]$/i, // Yes/no single letters
-          /^[αβγδεζηθικλμνξοπρστυφχψως]$/i, // Greek letters
-          /^(yes|no|ναι|όχι)$/i, // Yes/no in different languages
-        ];
-        
-        if (flowResponsePatterns.some(pattern => pattern.test(msg.text?.trim() || ''))) {
-          console.log(`[CandidateFlow] Creating session for user ${msg.from.id} to prevent ChatRelay forwarding`);
-          this.sessions.set(msg.from.id, { lang: 'en', answers: {}, step: -1 });
-          // Don't process the message further - just prevent forwarding
-          return;
-        }
-        return; // No session and not a flow response
+      const userId = msg.from.id;
+      const session = this.sessions.get(userId);
+      if (!session) return;
+      
+      // Skip if user is editing a specific answer
+      if (session.editingKey) {
+        await this.handleEditResponse(msg);
+        return;
       }
       
-      const session = this.sessions.get(msg.from.id)!;
-      // Ignore /start and callback_query
-      if (msg.text && !msg.text.startsWith('/')) {
-        const currentQ = QUESTIONS[session.lang][session.step];
-        if (!currentQ) return; // Guard for undefined
-        session.answers[currentQ.key] = msg.text.trim();
-        // If editing, go back to review directly
-        if (session.editingKey) {
-          delete session.editingKey;
-          session.reviewing = true;
-          await this.sendReview(msg.from.id, msg.chat.id);
-          return;
-        }
-
-        session.step++;
-        if (session.step < QUESTIONS[session.lang].length) {
-          await this.askNext(msg.from.id, msg.chat.id);
-        } else {
-          session.reviewing = true;
-          await this.sendReview(msg.from.id, msg.chat.id);
-        }
+      // Skip if user is in review mode
+      if (session.reviewing) {
+        await this.handleReviewResponse(msg);
+        return;
       }
+      
+      // Skip if user is awaiting custom date input
+      if (session.awaitingCustomDate) {
+        await this.handleCustomDateResponse(msg);
+        return;
+      }
+      
+      // Handle text input for current question
+      await this.handleTextResponse(msg);
     });
   }
 
@@ -282,30 +432,50 @@ export class CandidateStep1Flow {
     await this.sheets.appendRow('A2', row);
 
     // Notify admins that a candidate is ready for step-2
-    const adminIds = (process.env.ADMIN_IDS || '')
-      .split(',')
-      .map((id) => parseInt(id.trim(), 10))
-      .filter((n) => !isNaN(n));
+    const adminGroupId = process.env.ADMIN_GROUP_ID;
+    if (!adminGroupId) {
+      console.error('[CandidateStep1Flow] ADMIN_GROUP_ID not set - cannot notify admins');
+      return;
+    }
     
-    console.log(`[DEBUG] Admin notification - ADMIN_IDS env: ${process.env.ADMIN_IDS}`);
-    console.log(`[DEBUG] Admin notification - parsed adminIds:`, adminIds);
+    console.log(`[DEBUG] Admin notification - ADMIN_GROUP_ID env: ${adminGroupId}`);
     
     const inlineBtn = { text: session.lang === 'en' ? 'Start evaluation' : 'Ξεκινήστε αξιολόγηση', callback_data: `step2_${rowIndex}` };
     const notifyText = session.lang === 'en'
       ? `🆕 Candidate ready for Step-2: ${session.answers['NAME'] || ''}`
       : `🆕 Υποψήφιος για Βήμα-2: ${session.answers['NAME'] || ''}`;
     
-    console.log(`[DEBUG] Admin notification - sending to adminIds:`, adminIds);
+    console.log(`[DEBUG] Admin notification - sending to admin group: ${adminGroupId}`);
     console.log(`[DEBUG] Admin notification - text: ${notifyText}`);
     
-    for (const adminId of adminIds) {
+    try {
+      // First, let's try to get chat info to verify the group exists
+      const chatId = parseInt(adminGroupId, 10);
+      console.log(`[DEBUG] Attempting to get chat info for group ID: ${chatId}`);
+      
       try {
-        console.log(`[DEBUG] Admin notification - sending to adminId: ${adminId}`);
-        await this.bot.sendMessage(adminId, notifyText, { reply_markup: { inline_keyboard: [[inlineBtn]] } });
-        console.log(`[DEBUG] Admin notification - sent successfully to ${adminId}`);
-      } catch (error) { 
-        console.error(`[DEBUG] Admin notification - failed to send to ${adminId}:`, error);
+        const chatInfo = await this.bot.getChat(chatId);
+        console.log(`[DEBUG] Chat info retrieved successfully:`, {
+          id: chatInfo.id,
+          type: chatInfo.type,
+          title: chatInfo.title || 'No title'
+        });
+      } catch (chatError) {
+        console.error(`[DEBUG] Failed to get chat info for ${chatId}:`, chatError);
+        console.error(`[DEBUG] This means the bot is not a member of the group or the group ID is incorrect`);
+        return;
       }
+      
+      // Now try to send the message
+      await this.bot.sendMessage(chatId, notifyText, { reply_markup: { inline_keyboard: [[inlineBtn]] } });
+      console.log(`[DEBUG] Admin notification - sent successfully to admin group ${adminGroupId}`);
+    } catch (error) { 
+      console.error(`[DEBUG] Admin notification - failed to send to admin group ${adminGroupId}:`, error);
+      console.error(`[DEBUG] Error details:`, {
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        response: (error as any)?.response?.body
+      });
     }
 
     // --- Send interview & document instructions to candidate ---
@@ -467,6 +637,63 @@ export class CandidateStep1Flow {
       });
     } else {
       await this.bot.sendMessage(chatId, q.text);
+    }
+  }
+
+  private async handleEditResponse(msg: TelegramBot.Message): Promise<void> {
+    const userId = msg.from!.id;
+    const session = this.sessions.get(userId)!;
+    const currentQ = QUESTIONS[session.lang][session.step];
+    
+    if (!currentQ) return;
+    
+    session.answers[currentQ.key] = msg.text!.trim();
+    delete session.editingKey;
+    session.reviewing = true;
+    await this.sendReview(userId, msg.chat.id);
+  }
+
+  private async handleReviewResponse(msg: TelegramBot.Message): Promise<void> {
+    const userId = msg.from!.id;
+    const session = this.sessions.get(userId)!;
+    
+    if (msg.text?.toLowerCase() === 'yes' || msg.text?.toLowerCase() === 'ναι') {
+      await this.saveAndFinish(userId, msg.chat.id);
+    } else if (msg.text?.toLowerCase() === 'no' || msg.text?.toLowerCase() === 'όχι') {
+      session.reviewing = false;
+      session.step = 0;
+      await this.askNext(userId, msg.chat.id);
+    }
+  }
+
+  private async handleCustomDateResponse(msg: TelegramBot.Message): Promise<void> {
+    const userId = msg.from!.id;
+    const session = this.sessions.get(userId)!;
+    
+    session.answers['COURSEDATE'] = msg.text!.trim();
+    session.awaitingCustomDate = false;
+    session.reviewing = true;
+    await this.sendReview(userId, msg.chat.id);
+  }
+
+  private async handleTextResponse(msg: TelegramBot.Message): Promise<void> {
+    const userId = msg.from!.id;
+    const session = this.sessions.get(userId)!;
+    const currentQ = QUESTIONS[session.lang][session.step];
+    
+    if (!currentQ) return;
+    
+    // Update last activity
+    session.lastActivity = Date.now();
+    
+    session.answers[currentQ.key] = msg.text!.trim();
+    session.step++;
+    
+    if (session.step < QUESTIONS[session.lang].length) {
+      await this.askNext(userId, msg.chat.id);
+    } else {
+      session.reviewing = true;
+      await this.sendReview(userId, msg.chat.id);
     }
   }
 }

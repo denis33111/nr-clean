@@ -4,6 +4,7 @@ import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 interface CourseSession {
   awaitingReason?: boolean;          // Waiting for reschedule reason input
   row: number;                      // Sheet row index
+  lastActivity: number;             // Timestamp of last activity
 }
 
 // Shared session map so other modules (MessageHandler) can detect active course sessions
@@ -29,12 +30,44 @@ export class CandidateCourseFlow {
     this.bot = bot;
     this.sheets = sheets;
     this.setupHandlers();
+    this.setupSessionCleanup();
+  }
+
+  // Setup session cleanup to prevent memory leaks
+  private setupSessionCleanup(): void {
+    // Clean up expired sessions every 10 minutes
+    setInterval(() => {
+      const now = Date.now();
+      const sessionTTL = 30 * 60 * 1000; // 30 minutes TTL
+      let cleanedCount = 0;
+      
+      for (const [userId, session] of this.sessions) {
+        // Check if session is too old (no activity for 30 minutes)
+        const lastActivity = session.lastActivity || 0;
+        if (now - lastActivity > sessionTTL) {
+          this.sessions.delete(userId);
+          cleanedCount++;
+        }
+      }
+      
+      if (cleanedCount > 0) {
+        console.log(`[CandidateCourseFlow] Memory cleanup: Removed ${cleanedCount} expired sessions`);
+      }
+      
+      // Log session count for monitoring
+      if (this.sessions.size > 0) {
+        console.log(`[CandidateCourseFlow] Active sessions: ${this.sessions.size}`);
+      }
+    }, 10 * 60 * 1000); // Every 10 minutes
   }
 
   private setupHandlers() {
     // Handle course_* callback buttons
     this.bot.on('callback_query', async (q) => {
       if (!q.data || !q.from) return;
+      // Only allow in private chats, not group chats
+      if (q.message?.chat.type !== 'private') return;
+      
       const uid = q.from.id;
 
       if (q.data === 'course_yes') {
@@ -55,6 +88,9 @@ export class CandidateCourseFlow {
     // Capture free-text replies (reschedule reason)
     this.bot.on('message', async (msg) => {
       if (!msg.from || !msg.text || msg.text.startsWith('/')) return;
+      // Only allow in private chats, not group chats
+      if (msg.chat.type !== 'private') return;
+      
       const sess = this.sessions.get(msg.from.id);
       if (!sess) return;
 
@@ -72,6 +108,13 @@ export class CandidateCourseFlow {
   private async handleYes(userId: number, callbackId: string, chatId: number) {
     const { row, current, header } = await this.getRowData(userId);
     if (row === -1) return;
+    
+    // Update session activity
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivity = Date.now();
+    }
+    
     const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
 
     header.forEach((h, idx) => {
@@ -139,6 +182,12 @@ export class CandidateCourseFlow {
     if (row === -1) return;
     const lang = this.getLang(header, current);
     
+    // Update session activity
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivity = Date.now();
+    }
+    
     const message = tag === 'NOT_INTERESTED' 
       ? (lang === 'gr' 
           ? 'Καταλαβαίνουμε. Σας ευχαριστούμε για το ενδιαφέρον και σας ευχόμαστε καλή συνέχεια! 👋'
@@ -172,14 +221,31 @@ export class CandidateCourseFlow {
     await this.safeAnswer(callbackId);
     const { row, current, header } = await this.getRowData(userId);
     const lang = this.getLang(header, current);
+    
+    // Create course session with lastActivity
+    this.sessions.set(userId, { row, awaitingReason: true, lastActivity: Date.now() });
+    
+    // Update sheet immediately
+    const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
+    header.forEach((h, idx) => {
+      const key = normalise(h);
+      if (key === 'COURSECONFIRMED') current[idx] = 'RESCHEDULE';
+      if (key === 'STATUS') current[idx] = 'WAITING';
+      if (key === 'COURSEDATE') current[idx] = 'RESCHEDULE';
+    });
+    const range = `A${row}:${String.fromCharCode(65 + header.length - 1)}${row}`;
+    await this.sheets.updateRow(range, current);
+
+    // Send immediate response
     await this.bot.sendMessage(
       chatId,
       lang === 'gr'
-        ? 'Παρακαλώ γράψτε την προτιμώμενη ημερομηνία/ώρα ή τον λόγο που χρειάζεστε αλλαγή ημερομηνίας:'
-        : 'Please tell us your preferred date/time or reason you need to reschedule:',
-      { reply_markup: { force_reply: true } }
+        ? 'Ευχαριστούμε! Κάποιος από την ομάδα μας θα επικοινωνήσει μαζί σας σύντομα. 😊'
+        : 'Thank you! Someone from our team will contact you soon. 😊'
     );
-    if (row !== -1) this.sessions.set(userId, { awaitingReason: true, row });
+    
+    // Notify admins
+    await this.notifyAdmins(`🔄 ${this.getName(header, current) || userId.toString()} ζήτησε αλλαγή ημερομηνίας.`);
   }
 
   private async saveRescheduleReason(userId: number, reason: string, chatId: number, row: number) {
@@ -188,6 +254,13 @@ export class CandidateCourseFlow {
     const rowData = await this.sheets.getRows(rowRange);
     const current = (rowData[0] as string[]) || [];
     while (current.length < header.length) current.push('');
+    
+    // Update session activity
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivity = Date.now();
+    }
+    
     const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
 
     header.forEach((h, idx) => {
@@ -202,8 +275,8 @@ export class CandidateCourseFlow {
     await this.bot.sendMessage(
       chatId,
       lang === 'gr'
-        ? 'Ευχαριστούμε – οι υπεύθυνοι θα επικοινωνήσουν μαζί σας για να κανονίσετε νέα ημερομηνία.'
-        : 'Thank you – our managers will contact you to arrange a new date.'
+        ? 'Κάποιος από την ομάδα μας θα επικοινωνήσει μαζί σας.'
+        : 'Someone from our team will contact you.'
     );
     await this.notifyAdmins(`🔄 ${this.getName(header,current) || userId.toString()} ζήτησε αλλαγή ημερομηνίας:\n${reason}`);
   }
@@ -211,9 +284,15 @@ export class CandidateCourseFlow {
   private async handleAltYes(userId: number, callbackId: string, chatId: number) {
     await this.bot.answerCallbackQuery(callbackId);
     
+    // Update session activity
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivity = Date.now();
+    }
+    
     // Get candidate info and update database
     const header = await this.sheets.getHeaderRow();
-    const rowsRaw = await this.sheets.getRows(`A3:${String.fromCharCode(65 + header.length)}1000`);
+    const rowsRaw = await this.sheets.getRows('A3:Z1000');
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
     
@@ -250,9 +329,15 @@ export class CandidateCourseFlow {
   private async handleAltNo(userId: number, callbackId: string, chatId: number) {
     await this.bot.answerCallbackQuery(callbackId);
     
+    // Update session activity
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivity = Date.now();
+    }
+    
     // Get candidate info and update database
     const header = await this.sheets.getHeaderRow();
-    const rowsRaw = await this.sheets.getRows(`A3:${String.fromCharCode(65 + header.length)}1000`);
+    const rowsRaw = await this.sheets.getRows('A3:Z1000');
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
     
@@ -294,7 +379,7 @@ export class CandidateCourseFlow {
     const uidIdx = header.findIndex(h => normalise(h) === 'USERID');
     if (uidIdx === -1) return { row: -1, header, current: [] };
 
-    const dataRows = await this.sheets.getRows(`A3:${String.fromCharCode(65 + header.length)}1000`);
+    const dataRows = await this.sheets.getRows('A3:Z1000');
     if (!dataRows) return { row: -1, header, current: [] };
     const rows = dataRows as string[][];
     // Iterate from bottom to top to find the most recent entry for this user
@@ -311,12 +396,16 @@ export class CandidateCourseFlow {
   }
 
   private async notifyAdmins(text: string) {
-    const adminIds = (process.env.ADMIN_IDS || '')
-      .split(',')
-      .map(id => parseInt(id.trim(), 10))
-      .filter(n => !isNaN(n));
-    for (const id of adminIds) {
-      try { await this.bot.sendMessage(id, text); } catch (_) {/* ignore */}
+    const adminGroupId = process.env.ADMIN_GROUP_ID;
+    if (!adminGroupId) {
+      console.error('[CandidateCourseFlow] ADMIN_GROUP_ID not set - cannot notify admins');
+      return;
+    }
+    
+    try { 
+      await this.bot.sendMessage(parseInt(adminGroupId, 10), text); 
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Failed to send admin notification to group ${adminGroupId}:`, error);
     }
   }
 

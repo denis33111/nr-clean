@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
 import { UserService } from '../services/UserService';
+import { AdminService } from '../services/AdminService';
 
 export class CallbackQueryHandler {
   private bot: TelegramBot;
@@ -22,6 +23,8 @@ export class CallbackQueryHandler {
     const chatId = query.message?.chat.id;
     const userId = query.from.id;
     const callbackData = query.data;
+    const chatType = query.message?.chat.type;
+    const messageId = query.message?.message_id;
 
     this.logger.info(`Callback query received: ${callbackData} from user ${userId}`);
 
@@ -35,7 +38,7 @@ export class CallbackQueryHandler {
       }
 
       // Process the callback data
-      await this.processCallbackData(chatId, userId, callbackData);
+      await this.processCallbackData(chatId, userId, callbackData, chatType, messageId);
 
     } catch (error) {
       this.logger.error(`Error handling callback query ${callbackData}:`, error);
@@ -43,15 +46,25 @@ export class CallbackQueryHandler {
     }
   }
 
-  private async processCallbackData(chatId: number, userId: number, callbackData: string): Promise<void> {
+  private async processCallbackData(chatId: number, userId: number, callbackData: string, chatType?: string, messageId?: number): Promise<void> {
     // Split callback data to handle parameters
     const [action, ...params] = callbackData.split('_');
 
     switch (action) {
       case 'settings':
+        // Settings should only work in private chats
+        if (chatType !== 'private') {
+          await this.bot.sendMessage(chatId, '❌ Settings can only be accessed in private chats.');
+          return;
+        }
         await this.handleSettingsCallback(chatId, userId, params);
         break;
       case 'admin':
+        // Admin callbacks should only work in group chats
+        if (chatType === 'private') {
+          await this.bot.sendMessage(chatId, '❌ Admin functions can only be used in group chats.');
+          return;
+        }
         await this.handleAdminCallback(chatId, userId, params);
         break;
       case 'help':
@@ -59,6 +72,9 @@ export class CallbackQueryHandler {
         break;
       case 'stats':
         await this.handleStatsCallback(chatId, userId, params);
+        break;
+      case 'working':
+        await this.handleWorkingUserCallback(chatId, userId, params, messageId);
         break;
       // Language selection is handled by CandidateStep1Flow; ignore here to avoid duplicate "Unknown action" replies
       case 'lang':
@@ -365,5 +381,67 @@ Common issues and solutions:
   private async handleStatsCallback(chatId: number, userId: number, params: string[]): Promise<void> {
     // This would handle stats-related callback queries
     await this.bot.sendMessage(chatId, 'Stats callback received. Use /stats for your statistics.');
+  }
+
+  private async handleWorkingUserCallback(chatId: number, userId: number, params: string[], messageId?: number): Promise<void> {
+    if (params.length === 0) {
+      await this.bot.sendMessage(chatId, 'Invalid working user action.');
+      return;
+    }
+
+    const action = params[0];
+    const { MessageHandler } = await import('./MessageHandler');
+    const messageHandler = new MessageHandler(this.bot, this.database, this.logger);
+    const userLang = await messageHandler.getUserLanguage(userId);
+
+    switch (action) {
+      case 'checkin':
+        // Get user status and start check-in
+        const userStatus = await messageHandler.getUserStatus(userId);
+        if (userStatus) {
+          await messageHandler.handleWorkingUserCheckIn(chatId, userId, userStatus.name, messageId);
+        }
+        break;
+        
+      case 'checkout':
+        // Get user status and start check-out
+        const userStatusForCheckout = await messageHandler.getUserStatus(userId);
+        if (userStatusForCheckout) {
+          await messageHandler.handleWorkingUserCheckOut(chatId, userId, userStatusForCheckout.name, messageId);
+        }
+        break;
+        
+      case 'contact':
+        // Start contact flow
+        await messageHandler.startContactFlow(chatId, userId);
+        break;
+        
+      case 'help':
+        // Show working user help
+        const helpMessage = userLang === 'gr'
+          ? `👋 Γεια σας! Είστε εγγεγραμμένος εργαζόμενος.
+
+📋 Διαθέσιμες ενέργειες:
+• 📝 Check-in - Καταγραφή παρουσίας
+• 🚪 Check-out - Καταγραφή αποχώρησης
+• 📞 Επικοινωνία - Επικοινωνία με την ομάδα
+• ❓ Βοήθεια - Αυτό το μήνυμα
+
+💡 Συμβουλή: Κάντε check-in κάθε μέρα!`
+          : `👋 Hello! You are a registered employee.
+
+📋 Available actions:
+• 📝 Check-in - Record attendance
+• 🚪 Check-out - Record departure
+• 📞 Contact - Contact the team
+• ❓ Help - This message
+
+💡 Tip: Check in every day!`;
+        await this.bot.sendMessage(chatId, helpMessage);
+        break;
+        
+      default:
+        await this.bot.sendMessage(chatId, 'Invalid working user action.');
+    }
   }
 } 
