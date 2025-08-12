@@ -82,6 +82,9 @@ export class CommandHandler {
         case '/admin':
           await this.handleAdmin(msg, args);
           break;
+        case '/addadmin':
+          await this.handleAddAdmin(msg, args);
+          break;
         default:
           // Allow other flows to handle step2-related commands
           if (command === '/pending2' || command.startsWith('/step2_')) {
@@ -527,5 +530,51 @@ Last Active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'N
     
     const daysSinceCreation = Math.max(1, (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
     return Math.round((user.messageCount / daysSinceCreation) * 100) / 100;
+  }
+
+  private async handleAddAdmin(msg: TelegramBot.Message, args: string[]): Promise<void> {
+    const chatId = msg.chat.id;
+    const userId = msg.from!.id;
+
+    // Only allow in group chats
+    if (msg.chat.type === 'private') {
+      await this.bot.sendMessage(chatId, '❌ This command can only be used in group chats.');
+      return;
+    }
+
+    // Check if user is already admin (first admin can add others)
+    const isAdmin = await this.adminService.isAdmin(userId);
+    if (!isAdmin) {
+      // Check if there are any admins at all
+      const admins = await this.adminService.getAdmins();
+      if (admins.length === 0) {
+        // No admins exist, allow this user to become the first admin
+        await this.adminService.addAdmin(userId, ['owner']);
+        await this.bot.sendMessage(chatId, `✅ You have been added as the first admin (owner).`);
+        return;
+      } else {
+        await this.bot.sendMessage(chatId, '❌ Access denied. Admin privileges required.');
+        return;
+      }
+    }
+
+    if (args.length === 0) {
+      await this.bot.sendMessage(chatId, 'Usage: /addadmin <user_id>');
+      return;
+    }
+
+    const targetUserId = parseInt(args[0], 10);
+    if (isNaN(targetUserId)) {
+      await this.bot.sendMessage(chatId, 'Invalid user ID. Please provide a valid number.');
+      return;
+    }
+
+    try {
+      await this.adminService.addAdmin(targetUserId, ['admin']);
+      await this.bot.sendMessage(chatId, `✅ User ${targetUserId} has been added as an admin.`);
+    } catch (error) {
+      this.logger.error('Error adding admin:', error);
+      await this.bot.sendMessage(chatId, 'Error adding admin user.');
+    }
   }
 } 
