@@ -563,7 +563,7 @@ Last Active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'N
       return;
     }
 
-    const targetUserId = parseInt(args[0], 10);
+    const targetUserId = parseInt(args[0] || '0', 10);
     if (isNaN(targetUserId)) {
       await this.bot.sendMessage(chatId, 'Invalid user ID. Please provide a valid number.');
       return;
