@@ -85,7 +85,7 @@ export class AdminStep2Flow {
       if (!msg.from) return;
       // Only allow in group chats, not private chats
       if (msg.chat.type === 'private') return;
-      if (!(await this.adminService.isAdmin(msg.from.id))) return;
+      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
       const header = await this.sheets.getHeaderRow();
       const dataRows = await this.sheets.getRows('A3:Z1000');
       const rows: any[] = dataRows || [];
@@ -119,7 +119,7 @@ export class AdminStep2Flow {
       if (!msg.from || !match) return;
       // Only allow in group chats, not private chats
       if (msg.chat.type === 'private') return;
-      if (!(await this.adminService.isAdmin(msg.from.id))) return;
+      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
       const row = parseInt(match[1]!, 10);
       if (isNaN(row)) return;
       this.sessions.set(msg.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });
@@ -152,7 +152,7 @@ export class AdminStep2Flow {
           return;
         }
         console.log(`[AdminStep2Flow] Checking admin permissions for user ${q.from.id}`);
-        const isAdmin = await this.adminService.isAdmin(q.from.id);
+        const isAdmin = await this.adminService.isAdmin(q.from.id, q.message!.chat.id, this.bot);
         console.log(`[AdminStep2Flow] Admin check result for user ${q.from.id}: ${isAdmin}`);
         if (!isAdmin) return;
         this.sessions.set(q.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });

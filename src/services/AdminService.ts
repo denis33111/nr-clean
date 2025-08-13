@@ -33,14 +33,39 @@ export class AdminService {
     this.startTime = new Date();
   }
 
-  async isAdmin(userId: number): Promise<boolean> {
+  async isAdmin(userId: number, chatId?: number, bot?: any): Promise<boolean> {
     try {
-      this.logger.dbOperation('isAdmin', 'admins', { userId });
+      this.logger.dbOperation('isAdmin', 'admins', { userId, chatId });
 
+      // First check database
       const sql = 'SELECT COUNT(*) as count FROM admins WHERE userId = ?';
       const result = await this.database.get(sql, [userId]);
+      const isDbAdmin = result && result.count > 0;
 
-      return result && result.count > 0;
+      // If found in database, return true
+      if (isDbAdmin) {
+        return true;
+      }
+
+      // If no chatId or bot provided, only check database
+      if (!chatId || !bot) {
+        return isDbAdmin;
+      }
+
+      // Check Telegram group permissions as fallback
+      try {
+        const chatMember = await bot.getChatMember(chatId, userId);
+        const isGroupAdmin = chatMember.status === 'administrator' || chatMember.status === 'creator';
+        
+        if (isGroupAdmin) {
+          this.logger.info(`User ${userId} is admin in Telegram group ${chatId}`);
+          return true;
+        }
+      } catch (telegramError) {
+        this.logger.warn(`Could not check Telegram permissions for user ${userId}:`, telegramError);
+      }
+
+      return isDbAdmin;
 
     } catch (error) {
       this.logger.error('Error checking admin status:', error);

@@ -257,7 +257,7 @@ export class MessageHandler {
 
     // Skip if this is a group chat and user is not admin
     if (msg.chat.type !== 'private') {
-      const isAdmin = await this.adminService.isAdmin(userId);
+              const isAdmin = await this.adminService.isAdmin(userId, msg.chat.id, this.bot);
       if (!isAdmin) {
         return;
       }
