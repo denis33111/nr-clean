@@ -195,6 +195,29 @@ export class Bot {
 
     console.log(`[DEBUG] User ${userId} in candidate flow: ${isInCandidateFlow}, admin flow: ${isInAdminFlow}, course flow: ${isInCourseFlow}`);
 
+    // If user is in any active flow, let that flow handle the message
+    if (isInCandidateFlow || isInAdminFlow || isInCourseFlow) {
+      console.log(`[DEBUG] User ${userId} is in active flow, routing message to flow handler`);
+      
+      if (isInCandidateFlow && (this as any).candidateStep1Flow) {
+        console.log(`[DEBUG] Routing message to CandidateStep1Flow`);
+        // Let CandidateStep1Flow handle the message through its message handler
+        return; // The flow will handle it through its own message handler
+      }
+      
+      if (isInAdminFlow && (this as any).adminStep2Flow) {
+        console.log(`[DEBUG] Routing message to AdminStep2Flow`);
+        // Let AdminStep2Flow handle the message
+        return;
+      }
+      
+      if (isInCourseFlow && (this as any).candidateCourseFlow) {
+        console.log(`[DEBUG] Routing message to CandidateCourseFlow`);
+        // Let CandidateCourseFlow handle the message
+        return;
+      }
+    }
+
     // Route based on chat type and content
     if (chatType === 'private') {
       // Private chat - handle candidate registration or general messages
