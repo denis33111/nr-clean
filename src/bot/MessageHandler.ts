@@ -988,4 +988,28 @@ Would you like to share your location?
     await this.bot.sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
     console.log(`[MessageHandler] Main menu sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
   }
+
+  // Check if user has ongoing check-out session
+  public async hasOngoingCheckoutSession(userId: number): Promise<boolean> {
+    try {
+      // Check if user has any active check-out session
+      // This would check for pending location requests or active check-out flows
+      // For now, we'll return false as a safe default
+      // You can implement more sophisticated session tracking later
+      
+      console.log(`[MessageHandler] Checking ongoing checkout session for user ${userId}`);
+      
+      // TODO: Implement proper session tracking
+      // This could check:
+      // - Pending location requests
+      // - Active check-out flows
+      // - Uncompleted check-out processes
+      
+      return false; // Safe default - assume no ongoing checkout
+      
+    } catch (error) {
+      console.error(`[MessageHandler] Error checking ongoing checkout session for user ${userId}:`, error);
+      return false; // Safe default on error
+    }
+  }
 } 

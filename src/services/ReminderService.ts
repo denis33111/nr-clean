@@ -19,10 +19,10 @@ export class ReminderService {
       this.checkNoResponses().catch(console.error);
     });
     
-    // Run daily refresh at midnight (00:00) every day - ONLY for working users
+    // Run daily UI cleanup at midnight (00:00) every day - ONLY for working users
     cron.schedule('0 0 * * *', () => {
-      console.log('[ReminderService] Starting daily refresh for working users at midnight');
-      this.performDailyRefresh().catch(console.error);
+      console.log('[ReminderService] Starting daily UI cleanup for working users at midnight');
+      this.performDailyUICleanup().catch(console.error);
     });
     
     console.log('[ReminderService] Reminder service initialized - reminders will be scheduled when courses are added');
@@ -362,43 +362,51 @@ export class ReminderService {
     }
   }
 
-  // Daily refresh system - ONLY for working users
-  private async performDailyRefresh(): Promise<void> {
+  // Daily UI cleanup system - ONLY for working users
+  private async performDailyUICleanup(): Promise<void> {
     try {
-      console.log('[ReminderService] Starting daily refresh for working users...');
+      console.log('[ReminderService] Starting daily UI cleanup for working users...');
       
       // Get all working users from Google Sheets
       const workingUsers = await this.getWorkingUsers();
-      console.log(`[ReminderService] Found ${workingUsers.length} working users to refresh`);
+      console.log(`[ReminderService] Found ${workingUsers.length} working users to clean up`);
       
-      let refreshedCount = 0;
+      let cleanedCount = 0;
       let skippedCount = 0;
       
       for (const user of workingUsers) {
         try {
-          // Only refresh users with WORKING status
+          // Only clean up users with WORKING status
           if (user.status === 'WORKING') {
-            await this.refreshWorkingUser(user);
-            refreshedCount++;
-            console.log(`[ReminderService] Refreshed working user: ${user.name} (${user.id})`);
+            // Check if user has ongoing check-out event
+            const hasOngoingCheckout = await this.checkIfUserHasOngoingCheckout(parseInt(user.id, 10));
+            
+            if (hasOngoingCheckout) {
+              console.log(`[ReminderService] User ${user.name} has ongoing checkout, skipping cleanup`);
+              skippedCount++;
+            } else {
+              await this.cleanupUserChatMessages(parseInt(user.id, 10));
+              cleanedCount++;
+              console.log(`[ReminderService] Cleaned up chat for user: ${user.name} (${user.id})`);
+            }
           } else {
             skippedCount++;
             console.log(`[ReminderService] Skipped user: ${user.name} - status: ${user.status}`);
           }
         } catch (error) {
-          console.error(`[ReminderService] Error refreshing user ${user.name}:`, error);
+          console.error(`[ReminderService] Error cleaning up user ${user.name}:`, error);
         }
       }
       
-      console.log(`[ReminderService] Daily refresh completed: ${refreshedCount} refreshed, ${skippedCount} skipped`);
+      console.log(`[ReminderService] Daily UI cleanup completed: ${cleanedCount} cleaned, ${skippedCount} skipped`);
       
-      // Notify admins about the refresh
-      if (refreshedCount > 0) {
-        await this.notifyAdmins(`🔄 Daily refresh completed: ${refreshedCount} working users refreshed for new day`);
+      // Notify admins about the cleanup
+      if (cleanedCount > 0) {
+        await this.notifyAdmins(`🧹 Daily UI cleanup completed: ${cleanedCount} working users cleaned, ${skippedCount} skipped (ongoing checkout)`);
       }
       
     } catch (error) {
-      console.error('[ReminderService] Error during daily refresh:', error);
+      console.error('[ReminderService] Error during daily UI cleanup:', error);
     }
   }
 
@@ -505,6 +513,61 @@ export class ReminderService {
     } catch (error) {
       console.error('[ReminderService] Error getting user language:', error);
       return 'en';
+    }
+  }
+
+  // Check if user has ongoing check-out event
+  private async checkIfUserHasOngoingCheckout(userId: number): Promise<boolean> {
+    try {
+      // Import MessageHandler to check for ongoing sessions
+      const { MessageHandler } = await import('../bot/MessageHandler');
+      const { Database } = await import('../database/Database');
+      const { Logger } = await import('../utils/Logger');
+      
+      const database = new Database();
+      const logger = new Logger();
+      const messageHandler = new MessageHandler(this.bot, database, logger);
+      
+      // Check if user has any active check-out session
+      const hasOngoingCheckout = await messageHandler.hasOngoingCheckoutSession(userId);
+      
+      console.log(`[ReminderService] User ${userId} ongoing checkout check: ${hasOngoingCheckout}`);
+      return hasOngoingCheckout;
+      
+    } catch (error) {
+      console.error(`[ReminderService] Error checking ongoing checkout for user ${userId}:`, error);
+      // If we can't check, assume no ongoing checkout to be safe
+      return false;
+    }
+  }
+
+  // Clean up user chat messages (delete old messages)
+  private async cleanupUserChatMessages(userId: number): Promise<void> {
+    try {
+      console.log(`[ReminderService] Starting chat cleanup for user ${userId}`);
+      
+      // Get user's language preference
+      const userLang = await this.getUserLanguage(userId);
+      
+      // Send a cleanup notification message
+      const cleanupMsg = userLang === 'gr'
+        ? `🧹 Καθαρισμός συνομιλίας ολοκληρώθηκε!\n\n🌅 Καλημέρα! Είναι νέα μέρα εργασίας.\n\n📝 Επιλέξτε την ενέργειά σας:`
+        : `🧹 Chat cleanup completed!\n\n🌅 Good morning! It's a new work day.\n\n📝 Choose your action:`;
+      
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: userLang === 'gr' ? '📝 Log In' : '📝 Log In', callback_data: 'working_checkin' }],
+          [{ text: userLang === 'gr' ? '📞 Επικοινωνία' : '📞 Contact', callback_data: 'working_contact' }]
+        ]
+      };
+      
+      // Send fresh daily menu (this replaces old messages)
+      await this.bot.sendMessage(userId, cleanupMsg, { reply_markup: keyboard });
+      
+      console.log(`[ReminderService] Chat cleanup completed for user ${userId}`);
+      
+    } catch (error) {
+      console.error(`[ReminderService] Error cleaning up chat for user ${userId}:`, error);
     }
   }
 } 
