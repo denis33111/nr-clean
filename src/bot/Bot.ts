@@ -275,6 +275,16 @@ export class Bot {
       
       console.log(`[DEBUG] User ${userId} in candidate flow: ${isInCandidateFlow}, admin flow: ${isInAdminFlow}, course flow: ${isInCourseFlow}`);
       
+      // Check if this is an admin-related callback that should go to AdminStep2Flow
+      const isAdminCallback = query.data && (
+        query.data.startsWith('step2_') || 
+        query.data.startsWith('a2_') || 
+        query.data.startsWith('cdate_') || 
+        query.data === 'rej_only' || 
+        query.data === 'rej_alt' ||
+        query.data.startsWith('reschedule_')
+      );
+      
       // Route callback query to appropriate flow
       if (isInCandidateFlow && (this as any).candidateStep1Flow) {
         console.log(`[DEBUG] Routing callback query to CandidateStep1Flow`);
@@ -282,8 +292,8 @@ export class Bot {
         return;
       }
       
-      if (isInAdminFlow && (this as any).adminStep2Flow) {
-        console.log(`[DEBUG] Routing callback query to AdminStep2Flow`);
+      if ((isInAdminFlow || isAdminCallback) && (this as any).adminStep2Flow) {
+        console.log(`[DEBUG] Routing callback query to AdminStep2Flow (admin flow: ${isInAdminFlow}, admin callback: ${isAdminCallback})`);
         await (this as any).adminStep2Flow.handleCallbackQuery(query);
         return;
       }
