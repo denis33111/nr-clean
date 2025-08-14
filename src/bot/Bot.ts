@@ -255,13 +255,62 @@ export class Bot {
     try {
       if (update.message) {
         // Route all messages through the normal flow
-        // CandidateStep1Flow will handle /start commands via its onText handler
         this.routeMessage(update.message);
       } else if (update.callback_query) {
-        this.callbackQueryHandler.handleCallbackQuery(update.callback_query);
+        // Route callback queries to appropriate flow handlers
+        this.routeCallbackQuery(update.callback_query);
       }
     } catch (error) {
       this.logger.error('Error handling webhook update:', error);
+    }
+  }
+
+  // Route callback queries to appropriate flow handlers
+  private async routeCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
+    try {
+      if (!query.from) return;
+      
+      const userId = query.from.id;
+      console.log(`[DEBUG] Routing callback query: ${query.data} from user ${userId}`);
+      
+      // Check if user is in any active flow
+      const { candidateSessions } = await import('./CandidateStep1Flow');
+      const { adminSessions } = await import('./AdminStep2Flow');
+      const { courseSessions } = await import('./CandidateCourseFlow');
+      
+      const isInCandidateFlow = candidateSessions.has(userId);
+      const isInAdminFlow = adminSessions.has(userId);
+      const isInCourseFlow = courseSessions.has(userId);
+      
+      console.log(`[DEBUG] User ${userId} in candidate flow: ${isInCandidateFlow}, admin flow: ${isInAdminFlow}, course flow: ${isInCourseFlow}`);
+      
+      // Route callback query to appropriate flow
+      if (isInCandidateFlow && (this as any).candidateStep1Flow) {
+        console.log(`[DEBUG] Routing callback query to CandidateStep1Flow`);
+        await (this as any).candidateStep1Flow.handleCallbackQuery(query);
+        return;
+      }
+      
+      if (isInAdminFlow && (this as any).adminStep2Flow) {
+        console.log(`[DEBUG] Routing callback query to AdminStep2Flow`);
+        // AdminStep2Flow handles its own callbacks through setupHandlers
+        return;
+      }
+      
+      if (isInCourseFlow && (this as any).candidateCourseFlow) {
+        console.log(`[DEBUG] Routing callback query to CandidateCourseFlow`);
+        // CandidateCourseFlow handles its own callbacks through setupHandlers
+        return;
+      }
+      
+      // If not in any flow, use the default callback query handler
+      console.log(`[DEBUG] No active flow, using default callback query handler`);
+      this.callbackQueryHandler.handleCallbackQuery(query);
+      
+    } catch (error) {
+      console.error('[DEBUG] Error routing callback query:', error);
+      // Fallback to default handler
+      this.callbackQueryHandler.handleCallbackQuery(query);
     }
   }
 

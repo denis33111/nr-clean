@@ -182,86 +182,9 @@ export class CandidateStep1Flow {
 
   private setupHandlers() {
     // Remove onText handlers - they don't work in webhook mode
-    // Instead, we'll handle messages through the webhook system
+    // Remove on('callback_query') handlers - they don't work in webhook mode either
+    // Instead, we'll handle everything through the webhook system
     
-    this.bot.on('callback_query', async (query) => {
-      if (!query.data || !query.from) return;
-      // Only allow in private chats, not group chats
-      if (query.message?.chat.type !== 'private') return;
-      
-      const userId = query.from.id;
-      if (query.data === 'lang_en' || query.data === 'lang_gr') {
-        const lang = query.data === 'lang_en' ? 'en' : 'gr';
-        this.sessions.set(userId, { lang, answers: {}, step: 0, lastActivity: Date.now() });
-        await this.askNext(userId, query.message!.chat.id);
-        await this.bot.answerCallbackQuery(query.id);
-        return;
-      }
-
-      // Handle answer selections, callback data format: ans_<KEY>_<VALUE-with-underscores>
-      if (query.data.startsWith('ans_')) {
-        const session = this.sessions.get(userId);
-        if (!session) return;
-
-        // Guard against out-of-bounds step
-        if (session.step >= QUESTIONS[session.lang].length) {
-          await this.bot.answerCallbackQuery(query.id);
-          return;
-        }
-
-        // Determine which question this answer belongs to
-        const currentKey = session.editingKey || QUESTIONS[session.lang][session.step]!.key;
-
-        // Expected callback prefix: ans_<KEY>_
-        const expectedPrefix = `ans_${currentKey}_`;
-        if (!query.data.startsWith(expectedPrefix)) return; // malformed / out-of-sync
-
-        // Extract value part (keep underscores as stored)
-        const answerValue = query.data.substring(expectedPrefix.length);
-
-        // Save under the full question key so look-ups work (even if key contains underscores)
-        session.answers[currentKey] = answerValue;
-
-        // Handle edit mode separately
-        if (session.editingKey) {
-          delete session.editingKey;
-          session.reviewing = true;
-          await this.bot.answerCallbackQuery(query.id);
-          await this.sendReview(userId, query.message!.chat.id);
-          return;
-        }
-
-        // Advance to next question
-        session.step++;
-        await this.bot.answerCallbackQuery(query.id);
-        if (session.step < QUESTIONS[session.lang].length) {
-          await this.askNext(userId, query.message!.chat.id);
-        } else {
-          session.reviewing = true;
-          await this.sendReview(userId, query.message!.chat.id);
-        }
-        return;
-      }
-
-      // Handle review actions
-      if (query.data === 'review_confirm') {
-        await this.bot.answerCallbackQuery(query.id);
-        await this.saveAndFinish(userId, query.message!.chat.id);
-        return;
-      }
-
-      if (query.data.startsWith('review_edit_')) {
-        const key = query.data.replace('review_edit_', '');
-        const session = this.sessions.get(userId);
-        if (!session) return;
-        session.editingKey = key;
-        session.reviewing = false;
-        await this.bot.answerCallbackQuery(query.id);
-        await this.askEdit(userId, query.message!.chat.id, key);
-        return;
-      }
-    });
-
     this.bot.on('message', async (msg) => {
       if (!msg.text || !msg.from) return;
       // Only allow in private chats, not group chats
@@ -301,6 +224,88 @@ export class CandidateStep1Flow {
         }
       }
     });
+  }
+
+  // Public method to handle callback queries from webhook system
+  public async handleCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
+    if (!query.data || !query.from) return;
+    // Only allow in private chats, not group chats
+    if (query.message?.chat.type !== 'private') return;
+    
+    const userId = query.from.id;
+    console.log(`[CandidateStep1Flow] Processing callback query: ${query.data} from user ${userId}`);
+    
+    if (query.data === 'lang_en' || query.data === 'lang_gr') {
+      const lang = query.data === 'lang_en' ? 'en' : 'gr';
+      console.log(`[CandidateStep1Flow] User ${userId} selected language: ${lang}`);
+      this.sessions.set(userId, { lang, answers: {}, step: 0, lastActivity: Date.now() });
+      await this.askNext(userId, query.message!.chat.id);
+      await this.bot.answerCallbackQuery(query.id);
+      return;
+    }
+
+    // Handle answer selections, callback data format: ans_<KEY>_<VALUE-with-underscores>
+    if (query.data.startsWith('ans_')) {
+      const session = this.sessions.get(userId);
+      if (!session) return;
+
+      // Guard against out-of-bounds step
+      if (session.step >= QUESTIONS[session.lang].length) {
+        await this.bot.answerCallbackQuery(query.id);
+        return;
+      }
+
+      // Determine which question this answer belongs to
+      const currentKey = session.editingKey || QUESTIONS[session.lang][session.step]!.key;
+
+      // Expected callback prefix: ans_<KEY>_
+      const expectedPrefix = `ans_${currentKey}_`;
+      if (!query.data.startsWith(expectedPrefix)) return; // malformed / out-of-sync
+
+      // Extract value part (keep underscores as stored)
+      const answerValue = query.data.substring(expectedPrefix.length);
+
+      // Save under the full question key so look-ups work (even if key contains underscores)
+      session.answers[currentKey] = answerValue;
+
+      // Handle edit mode separately
+      if (session.editingKey) {
+        delete session.editingKey;
+        session.reviewing = true;
+        await this.bot.answerCallbackQuery(query.id);
+        await this.sendReview(userId, query.message!.chat.id);
+        return;
+      }
+
+      // Advance to next question
+      session.step++;
+      await this.bot.answerCallbackQuery(query.id);
+      if (session.step < QUESTIONS[session.lang].length) {
+        await this.askNext(userId, query.message!.chat.id);
+      } else {
+        session.reviewing = true;
+        await this.sendReview(userId, query.message!.chat.id);
+      }
+      return;
+    }
+
+    // Handle review actions
+    if (query.data === 'review_confirm') {
+      await this.bot.answerCallbackQuery(query.id);
+      await this.saveAndFinish(userId, query.message!.chat.id);
+      return;
+    }
+
+    if (query.data.startsWith('review_edit_')) {
+      const key = query.data.replace('review_edit_', '');
+      const session = this.sessions.get(userId);
+      if (!session) return;
+      session.editingKey = key;
+      session.reviewing = false;
+      await this.bot.answerCallbackQuery(query.id);
+      await this.askEdit(userId, query.message!.chat.id, key);
+      return;
+    }
   }
 
   // Public method to handle /start command from webhook system
