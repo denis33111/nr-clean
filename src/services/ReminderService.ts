@@ -19,6 +19,12 @@ export class ReminderService {
       this.checkNoResponses().catch(console.error);
     });
     
+    // Run daily refresh at midnight (00:00) every day - ONLY for working users
+    cron.schedule('0 0 * * *', () => {
+      console.log('[ReminderService] Starting daily refresh for working users at midnight');
+      this.performDailyRefresh().catch(console.error);
+    });
+    
     console.log('[ReminderService] Reminder service initialized - reminders will be scheduled when courses are added');
   }
 
@@ -341,17 +347,164 @@ export class ReminderService {
     }
   }
 
-  private async notifyAdmins(text: string) {
-    const adminGroupId = process.env.ADMIN_GROUP_ID;
-    if (!adminGroupId) {
-      console.error('[ReminderService] ADMIN_GROUP_ID not set - cannot notify admins');
-      return;
-    }
-    
-    try { 
-      await this.bot.sendMessage(parseInt(adminGroupId, 10), text); 
+  private async notifyAdmins(message: string): Promise<void> {
+    try {
+      const adminGroupId = process.env.ADMIN_GROUP_ID;
+      if (!adminGroupId) {
+        console.log('[ReminderService] ADMIN_GROUP_ID not set, skipping admin notification');
+        return;
+      }
+
+      await this.bot.sendMessage(adminGroupId, message);
+      console.log('[ReminderService] Admin notification sent successfully');
     } catch (error) {
-      console.error(`[ReminderService] Failed to send admin notification to group ${adminGroupId}:`, error);
+      console.error('[ReminderService] Failed to send admin notification:', error);
+    }
+  }
+
+  // Daily refresh system - ONLY for working users
+  private async performDailyRefresh(): Promise<void> {
+    try {
+      console.log('[ReminderService] Starting daily refresh for working users...');
+      
+      // Get all working users from Google Sheets
+      const workingUsers = await this.getWorkingUsers();
+      console.log(`[ReminderService] Found ${workingUsers.length} working users to refresh`);
+      
+      let refreshedCount = 0;
+      let skippedCount = 0;
+      
+      for (const user of workingUsers) {
+        try {
+          // Only refresh users with WORKING status
+          if (user.status === 'WORKING') {
+            await this.refreshWorkingUser(user);
+            refreshedCount++;
+            console.log(`[ReminderService] Refreshed working user: ${user.name} (${user.id})`);
+          } else {
+            skippedCount++;
+            console.log(`[ReminderService] Skipped user: ${user.name} - status: ${user.status}`);
+          }
+        } catch (error) {
+          console.error(`[ReminderService] Error refreshing user ${user.name}:`, error);
+        }
+      }
+      
+      console.log(`[ReminderService] Daily refresh completed: ${refreshedCount} refreshed, ${skippedCount} skipped`);
+      
+      // Notify admins about the refresh
+      if (refreshedCount > 0) {
+        await this.notifyAdmins(`🔄 Daily refresh completed: ${refreshedCount} working users refreshed for new day`);
+      }
+      
+    } catch (error) {
+      console.error('[ReminderService] Error during daily refresh:', error);
+    }
+  }
+
+  // Get all working users from Google Sheets
+  private async getWorkingUsers(): Promise<Array<{ id: string; name: string; status: string }>> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) return [];
+      
+      const rows = rowsRaw as string[][];
+      
+      // Find relevant columns
+      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      const colName = header.findIndex(h => this.normalise(h) === 'NAME');
+      const colStatus = header.findIndex(h => this.normalise(h) === 'STATUS');
+      
+      if (colUserId === -1 || colName === -1 || colStatus === -1) {
+        console.log('[ReminderService] Required columns not found for working users');
+        return [];
+      }
+      
+      const workingUsers: Array<{ id: string; name: string; status: string }> = [];
+      
+      for (const row of rows) {
+        const userId = row[colUserId]?.trim();
+        const name = row[colName]?.trim();
+        const status = row[colStatus]?.trim();
+        
+        if (userId && name && status) {
+          workingUsers.push({ id: userId, name, status });
+        }
+      }
+      
+      return workingUsers;
+      
+    } catch (error) {
+      console.error('[ReminderService] Error getting working users:', error);
+      return [];
+    }
+  }
+
+  // Refresh a single working user
+  private async refreshWorkingUser(user: { id: string; name: string; status: string }): Promise<void> {
+    try {
+      const userId = parseInt(user.id, 10);
+      if (isNaN(userId)) {
+        console.log(`[ReminderService] Invalid user ID: ${user.id}`);
+        return;
+      }
+      
+      // Get user's language preference
+      const userLang = await this.getUserLanguage(userId);
+      
+      // Send fresh daily start message
+      const refreshMsg = userLang === 'gr'
+        ? `🌅 Καλημέρα! Είναι νέα μέρα εργασίας.\n\n📝 Επιλέξτε την ενέργειά σας:`
+        : `🌅 Good morning! It's a new work day.\n\n📝 Choose your action:`;
+      
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: userLang === 'gr' ? '📝 Log In' : '📝 Log In', callback_data: 'working_checkin' }],
+          [{ text: userLang === 'gr' ? '📞 Επικοινωνία' : '📞 Contact', callback_data: 'working_contact' }]
+        ]
+      };
+      
+      await this.bot.sendMessage(userId, refreshMsg, { reply_markup: keyboard });
+      console.log(`[ReminderService] Sent daily refresh message to user ${user.name} (${userId})`);
+      
+    } catch (error) {
+      console.error(`[ReminderService] Error refreshing user ${user.name}:`, error);
+    }
+  }
+
+  // Helper method to get user's language from Google Sheets
+  private async getUserLanguage(userId: number): Promise<'en' | 'gr'> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) return 'en';
+      
+      const rows = rowsRaw as string[][];
+      
+      // Column B for user ID, find language column
+      const userIdCol = 1; // Column B (0-indexed = 1)
+      const langCol = header.findIndex(h => {
+        const norm = h.toUpperCase().replace(/\s|_/g, '');
+        return norm === 'LANG' || norm === 'LANGUAGE';
+      });
+      
+      if (langCol === -1) return 'en';
+      
+      for (const row of rows) {
+        if (!row[userIdCol]) continue;
+        
+        const rowUserId = parseInt(row[userIdCol] || '', 10);
+        if (rowUserId === userId) {
+          const langVal = (row[langCol] || '').toLowerCase();
+          return langVal.startsWith('gr') ? 'gr' : 'en';
+        }
+      }
+      
+      return 'en';
+    } catch (error) {
+      console.error('[ReminderService] Error getting user language:', error);
+      return 'en';
     }
   }
 } 
