@@ -12,6 +12,7 @@ interface AdminSession {
   awaitingCustomDate?: boolean;
   rejectionChoice?: 'only' | 'alt';
   lastActivity: number; // Timestamp of last activity
+  awaitingRescheduleDate?: boolean; // New for reschedule flow
 }
 
 const POSITION_OPTIONS = ['HL', 'Supervisor', 'EQ'];
@@ -110,6 +111,16 @@ export class AdminStep2Flow {
       });
     });
 
+    // /reschedule command – list candidates who requested reschedule
+    this.bot.onText(/\/reschedule/, async (msg) => {
+      if (!msg.from) return;
+      // Only allow in group chats, not private chats
+      if (msg.chat.type === 'private') return;
+      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
+      
+      await this.showRescheduleRequests(msg.chat.id);
+    });
+
     // Handle inline button callback "step2_row" as well as /step2_row command
     const startSession = async (row: number, chatId: number) => {
       this.sessions.set(chatId, { row, step: 0, answers: {}, lastActivity: Date.now() });
@@ -126,6 +137,7 @@ export class AdminStep2Flow {
       await this.handleNextStep(msg.from.id, msg.chat.id);
     });
 
+    // Handle callback queries for reschedule actions
     this.bot.on('callback_query', async (q) => {
       if (!q.from || !q.data) return;
       // Only process AdminStep2Flow-specific callbacks
@@ -133,7 +145,8 @@ export class AdminStep2Flow {
                                   q.data.startsWith('a2_') || 
                                   q.data.startsWith('cdate_') || 
                                   q.data === 'rej_only' || 
-                                  q.data === 'rej_alt';
+                                  q.data === 'rej_alt' ||
+                                  q.data.startsWith('reschedule_');
       if (!isAdminStep2Callback) {
         // Not an AdminStep2Flow callback, ignore it
         return;
@@ -144,6 +157,12 @@ export class AdminStep2Flow {
         console.log(`[AdminStep2Flow] Skipping private chat callback: ${q.data}`);
         return;
       }
+      
+      if (q.data.startsWith('reschedule_')) {
+        await this.handleRescheduleCallback(q);
+        return;
+      }
+      
       if (q.data.startsWith('step2_')) {
         console.log(`[AdminStep2Flow] Processing step2 callback: ${q.data}`);
         const row = parseInt(q.data.replace('step2_', ''), 10);
@@ -211,29 +230,37 @@ export class AdminStep2Flow {
       }
     });
 
+    // Handle text messages for reschedule flow and regular admin flow
     this.bot.on('message', async (msg) => {
-      // Only handle if user is in an admin session AND in a group chat
-      if (!msg.from || !this.sessions.has(msg.from.id)) return;
+      if (!msg.from || !msg.text || msg.text.startsWith('/')) return;
       // Only allow in group chats, not private chats
       if (msg.chat.type === 'private') return;
       
-      const sess = this.sessions.get(msg.from.id);
-      if (!sess) return;
+      const session = this.sessions.get(msg.from.id);
+      if (!session) return;
+
+      // Handle reschedule date input
+      if (session.awaitingRescheduleDate) {
+        await this.handleNewCourseDate(msg.from.id, msg.text.trim(), msg.chat.id);
+        return;
+      }
+
+      // Handle regular admin flow
       if (msg.text && !msg.text.startsWith('/')) {
         // Handle custom date input first (special case)
-        if (sess.awaitingCustomDate) {
-          sess.answers['COURSEDATE'] = msg.text.trim();
-          sess.awaitingCustomDate = false;
-          sess.step = 3; // notes
+        if (session.awaitingCustomDate) {
+          session.answers['COURSEDATE'] = msg.text.trim();
+          session.awaitingCustomDate = false;
+          session.step = 3; // notes
           await this.handleNextStep(msg.from.id, msg.chat.id);
           return;
         }
         // Handle regular questions
-        const question = this.getQuestions(sess)[sess.step];
+        const question = this.getQuestions(session)[session.step];
         if (question) {
           const k = question.key.replace(/\s|_/g, '').toUpperCase();
-          sess.answers[k] = msg.text.trim();
-          sess.step++;
+          session.answers[k] = msg.text.trim();
+          session.step++;
           await this.handleNextStep(msg.from.id, msg.chat.id);
         }
       }
@@ -491,6 +518,169 @@ export class AdminStep2Flow {
       }
       
       this.sessions.delete(userId);
+    }
+  }
+
+  // Show candidates who requested reschedule
+  private async showRescheduleRequests(chatId: number): Promise<void> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const dataRows = await this.sheets.getRows('A3:Z1000');
+      const rows: any[] = dataRows || [];
+      
+      const colStep3 = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'STEP3');
+      const colName = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'NAME');
+      const colUserId = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'USERID');
+      const colCourseDate = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'COURSEDATE');
+      
+      if (colStep3 === -1 || colName === -1 || colUserId === -1) {
+        await this.bot.sendMessage(chatId, '❌ Error: Required columns not found in sheet.');
+        return;
+      }
+
+      const rescheduleRows = rows
+        .map((r, idx) => ({ r, idx }))
+        .filter(({ r }) => r[colStep3] === 'reschedule');
+
+      if (rescheduleRows.length === 0) {
+        await this.bot.sendMessage(chatId, '✅ No candidates waiting for reschedule.');
+        return;
+      }
+
+      const message = `🔄 **Candidates waiting for reschedule:**\n\n${rescheduleRows
+        .map(({ r, idx }) => {
+          const name = r[colName] || 'Unknown';
+          const userId = r[colUserId] || 'Unknown';
+          const courseDate = r[colCourseDate] || 'Unknown';
+          return `• **${name}** (ID: ${userId})\n  📅 Current date: ${courseDate}\n  📍 Row: ${idx + 3}`;
+        })
+        .join('\n\n')}`;
+
+      const keyboard = rescheduleRows.map(({ r, idx }) => [{
+        text: `🔄 Reschedule ${r[colName] || 'Unknown'}`,
+        callback_data: `reschedule_${idx + 3}_${r[colUserId] || '0'}`
+      }]);
+
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: keyboard }
+      });
+
+    } catch (error) {
+      console.error('[AdminStep2Flow] Error showing reschedule requests:', error);
+      await this.bot.sendMessage(chatId, '❌ Error loading reschedule requests.');
+    }
+  }
+
+  // Handle reschedule callback from admin
+  private async handleRescheduleCallback(q: TelegramBot.CallbackQuery): Promise<void> {
+    try {
+      const parts = q.data!.split('_');
+      if (parts.length < 3) return;
+      
+      const row = parseInt(parts[1], 10);
+      const userId = parseInt(parts[2], 10);
+      
+      if (isNaN(row) || isNaN(userId)) return;
+
+      // Create admin session for reschedule
+      this.sessions.set(q.from!.id, {
+        row,
+        step: 0,
+        answers: {},
+        awaitingRescheduleDate: true,
+        lastActivity: Date.now()
+      });
+
+      await this.bot.answerCallbackQuery(q.id);
+      
+      // Ask admin for new course date
+      await this.bot.sendMessage(q.message!.chat.id, 
+        `📅 **Reschedule Course**\n\nPlease enter the new course date in format: **YYYY-MM-DD**\n\nExample: 2025-08-20`,
+        { parse_mode: 'Markdown' }
+      );
+
+    } catch (error) {
+      console.error('[AdminStep2Flow] Error handling reschedule callback:', error);
+      await this.bot.answerCallbackQuery(q.id, '❌ Error processing reschedule request.');
+    }
+  }
+
+  // Handle new course date from admin
+  private async handleNewCourseDate(adminId: number, dateStr: string, chatId: number): Promise<void> {
+    try {
+      const session = this.sessions.get(adminId);
+      if (!session) return;
+
+      // Validate date format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(dateStr)) {
+        await this.bot.sendMessage(chatId, 
+          '❌ Invalid date format. Please use YYYY-MM-DD format.\n\nExample: 2025-08-20'
+        );
+        return;
+      }
+
+      // Validate date is in the future
+      const courseDate = new Date(dateStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (courseDate <= today) {
+        await this.bot.sendMessage(chatId, 
+          '❌ Course date must be in the future. Please enter a valid future date.'
+        );
+        return;
+      }
+
+      // Update Google Sheets with new course date
+      const header = await this.sheets.getHeaderRow();
+      const rowRange = `A${session.row}:${String.fromCharCode(65 + header.length - 1)}${session.row}`;
+      const rowData = await this.sheets.getRows(rowRange);
+      const current = (rowData[0] as string[]) || [];
+      while (current.length < header.length) current.push('');
+
+      const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
+      
+      // Update course date and reset status
+      header.forEach((h, idx) => {
+        const key = normalise(h);
+        if (key === 'COURSEDATE') current[idx] = dateStr;
+        if (key === 'STEP3') current[idx] = 'pending';
+        if (key === 'COURSECONFIRMED') current[idx] = '';
+        if (key === 'STATUS') current[idx] = 'CANDIDATE';
+      });
+
+      await this.sheets.updateRow(rowRange, current);
+
+      // Get candidate info for notifications
+      const colName = header.findIndex(h => normalise(h) === 'NAME');
+      const colUserId = header.findIndex(h => normalise(h) === 'USERID');
+      const candidateName = colName !== -1 ? current[colName] || 'Unknown' : 'Unknown';
+      const candidateUserId = colUserId !== -1 ? current[colUserId] || '0' : '0';
+
+      // Reschedule reminder for new date
+      if (this.reminderService && this.reminderService.scheduleReminderForCourse) {
+        try {
+          await this.reminderService.scheduleReminderForCourse(candidateName, parseInt(candidateUserId, 10), dateStr);
+          console.log(`[AdminStep2Flow] Rescheduled reminder for ${candidateName} on ${dateStr}`);
+        } catch (reminderError) {
+          console.error('[AdminStep2Flow] Error rescheduling reminder:', reminderError);
+        }
+      }
+
+      // Notify admin of success
+      await this.bot.sendMessage(chatId,
+        `✅ **Course Rescheduled Successfully!**\n\n👤 **Candidate:** ${candidateName}\n📅 **New Date:** ${dateStr}\n🔄 **Status:** Reset to pending\n⏰ **Reminder:** Rescheduled for new date`,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Clear admin session
+      this.sessions.delete(adminId);
+
+    } catch (error) {
+      console.error('[AdminStep2Flow] Error handling new course date:', error);
+      await this.bot.sendMessage(chatId, '❌ Error updating course date. Please try again.');
     }
   }
 } 

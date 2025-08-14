@@ -337,6 +337,32 @@ export class CandidateCourseFlow {
     await this.notifyAdmins(`🔄 ${this.getName(header,current) || userId.toString()} ζήτησε αλλαγή ημερομηνίας:\n${reason}`);
   }
 
+  // Public method to notify user about course reschedule (called from AdminStep2Flow)
+  public async notifyCourseRescheduled(userId: number, newDate: string): Promise<void> {
+    try {
+      const { header, current } = await this.getRowData(userId);
+      if (!current.length) return;
+
+      const lang = this.getLang(header, current);
+      const candidateName = this.getName(header, current) || userId.toString();
+
+      const message = lang === 'gr'
+        ? `🔄 **Ημερομηνία μαθήματος αλλάχθηκε!**\n\n👤 **Υποψήφιος:** ${candidateName}\n📅 **Νέα ημερομηνία:** ${newDate}\n\n✅ Η ημερομηνία του μαθήματός σας έχει αλλάξει. Θα λάβετε υπενθύμιση την ημέρα πριν από το μάθημα.`
+        : `🔄 **Course date changed!**\n\n👤 **Candidate:** ${candidateName}\n📅 **New date:** ${newDate}\n\n✅ Your course date has been changed. You will receive a reminder the day before the course.`;
+
+      // Try to send message to user
+      try {
+        await this.bot.sendMessage(userId, message, { parse_mode: 'Markdown' });
+        console.log(`[CandidateCourseFlow] Notified user ${userId} about course reschedule to ${newDate}`);
+      } catch (sendError) {
+        console.error(`[CandidateCourseFlow] Failed to send reschedule notification to user ${userId}:`, sendError);
+      }
+
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Error notifying user ${userId} about course reschedule:`, error);
+    }
+  }
+
   private async handleAltYes(userId: number, callbackId: string, chatId: number) {
     await this.bot.answerCallbackQuery(callbackId);
     
