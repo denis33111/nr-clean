@@ -195,18 +195,27 @@ export class Bot {
 
     console.log(`[DEBUG] User ${userId} in candidate flow: ${isInCandidateFlow}, admin flow: ${isInAdminFlow}, course flow: ${isInCourseFlow}`);
 
-    // If user is in any active flow, let that flow handle the message
-    if (isInCandidateFlow || isInAdminFlow || isInCourseFlow) {
-      console.log(`[DEBUG] User ${userId} is in active flow, skipping routing`);
-      return;
-    }
-
     // Route based on chat type and content
     if (chatType === 'private') {
       // Private chat - handle candidate registration or general messages
       if (text.startsWith('/start')) {
-        console.log(`[DEBUG] /start command in private chat, checking CandidateStep1Flow`);
-        // Let CandidateStep1Flow handle the /start command
+        console.log(`[DEBUG] /start command in private chat, calling CandidateStep1Flow`);
+        
+        // Use the stored CandidateStep1Flow instance
+        try {
+          if ((this as any).candidateStep1Flow) {
+            await (this as any).candidateStep1Flow.handleStartCommand(msg);
+            return;
+          } else {
+            console.error('[DEBUG] CandidateStep1Flow not initialized');
+            this.messageHandler.handleMessage(msg);
+            return;
+          }
+        } catch (error) {
+          console.error('[DEBUG] Error calling CandidateStep1Flow:', error);
+          // Fallback to MessageHandler
+          this.messageHandler.handleMessage(msg);
+        }
         return;
       }
       
@@ -215,12 +224,8 @@ export class Bot {
     } else if (chatType === 'supergroup' || chatType === 'group') {
       // Group chat - handle admin commands
       if (text.startsWith('/')) {
-        // Assuming adminStep2Flow is defined elsewhere or needs to be imported
-        // For now, we'll just log that it's a group chat and a command
         console.log(`[DEBUG] Group chat with command: ${text}`);
-        // The original code had this line commented out, so we'll keep it commented.
-        // If adminStep2Flow is meant to be used here, it needs to be initialized.
-        // For now, we'll just log the command.
+        // Let AdminStep2Flow handle admin commands
         return;
       }
       

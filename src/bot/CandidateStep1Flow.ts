@@ -181,63 +181,9 @@ export class CandidateStep1Flow {
   }
 
   private setupHandlers() {
-    this.bot.onText(/\/start/, async (msg) => {
-      const startTime = Date.now();
-      console.log(`[CandidateStep1Flow] /start command received at ${new Date().toISOString()}`);
-      
-      // Only allow in private chats, not group chats
-      if (msg.chat.type !== 'private') return;
-      
-      const userId = msg.from!.id;
-      console.log(`[CandidateStep1Flow] Processing user ${userId} at ${new Date().toISOString()}`);
-      
-      // Check if user is already being processed
-      if (processingUsers.has(userId)) {
-        console.log(`[CandidateStep1Flow] User ${userId} already being processed, skipping`);
-        return;
-      }
-      
-      // Mark user as being processed
-      processingUsers.add(userId);
-      console.log(`[CandidateStep1Flow] User ${userId} marked as processing`);
-      
-      try {
-        // Check if user already has "working" status
-        console.log(`[CandidateStep1Flow] Checking user status at ${new Date().toISOString()}`);
-        const userStatus = await this.getUserStatus(userId);
-        console.log(`[CandidateStep1Flow] User status result:`, userStatus);
-        
-        if (userStatus && userStatus.status.toLowerCase() === 'working') {
-          console.log(`[CandidateStep1Flow] User is working, showing main menu at ${new Date().toISOString()}`);
-          // User is already working, show working user main menu
-          const { MessageHandler } = await import('./MessageHandler');
-          const { Database } = await import('../database/Database');
-          const { Logger } = await import('../utils/Logger');
-          const database = new Database();
-          const logger = new Logger();
-          const messageHandler = new MessageHandler(this.bot, database, logger);
-          await messageHandler.showWorkingUserMainMenu(msg.chat.id, userId, userStatus.name);
-          console.log(`[CandidateStep1Flow] Main menu sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
-          return;
-        }
-        
-        console.log(`[CandidateStep1Flow] Starting application flow at ${new Date().toISOString()}`);
-        // Clear any existing course session to prevent conflicts
-        courseSessions.delete(msg.from!.id);
-        
-        this.sessions.set(msg.from!.id, { lang: 'en', answers: {}, step: -1, lastActivity: Date.now() });
-        await this.askLanguage(msg.chat.id);
-        console.log(`[CandidateStep1Flow] Language question sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
-      } catch (error) {
-        console.error('[CandidateStep1Flow] Error checking user status:', error);
-        // Continue with application flow if there's an error
-      } finally {
-        // Always remove user from processing set
-        processingUsers.delete(userId);
-        console.log(`[CandidateStep1Flow] User ${userId} removed from processing`);
-      }
-    });
-
+    // Remove onText handlers - they don't work in webhook mode
+    // Instead, we'll handle messages through the webhook system
+    
     this.bot.on('callback_query', async (query) => {
       if (!query.data || !query.from) return;
       // Only allow in private chats, not group chats
@@ -337,15 +283,82 @@ export class CandidateStep1Flow {
         return;
       }
       
-      // Skip if user is awaiting custom date input
-      if (session.awaitingCustomDate) {
-        await this.handleCustomDateResponse(msg);
+      // Regular question flow
+      if (session.step < QUESTIONS[session.lang].length) {
+        const question = QUESTIONS[session.lang][session.step];
+        if (question && !question.options) {
+          // Text question - save answer and move to next
+          session.answers[question.key] = msg.text.trim();
+          session.step++;
+          session.lastActivity = Date.now();
+          
+          if (session.step < QUESTIONS[session.lang].length) {
+            await this.askNext(userId, msg.chat.id);
+          } else {
+            session.reviewing = true;
+            await this.sendReview(userId, msg.chat.id);
+          }
+        }
+      }
+    });
+  }
+
+  // Public method to handle /start command from webhook system
+  public async handleStartCommand(msg: TelegramBot.Message): Promise<void> {
+    const startTime = Date.now();
+    console.log(`[CandidateStep1Flow] /start command received at ${new Date().toISOString()}`);
+    
+    // Only allow in private chats, not group chats
+    if (msg.chat.type !== 'private') return;
+    
+    const userId = msg.from!.id;
+    console.log(`[CandidateStep1Flow] Processing user ${userId} at ${new Date().toISOString()}`);
+    
+    // Check if user is already being processed
+    if (processingUsers.has(userId)) {
+      console.log(`[CandidateStep1Flow] User ${userId} already being processed, skipping`);
+      return;
+    }
+    
+    // Mark user as being processed
+    processingUsers.add(userId);
+    console.log(`[CandidateStep1Flow] User ${userId} marked as processing`);
+    
+    try {
+      // Check if user already has "working" status
+      console.log(`[CandidateStep1Flow] Checking user status at ${new Date().toISOString()}`);
+      const userStatus = await this.getUserStatus(userId);
+      console.log(`[CandidateStep1Flow] User status result:`, userStatus);
+      
+      if (userStatus && userStatus.status.toLowerCase() === 'working') {
+        console.log(`[CandidateStep1Flow] User is working, showing main menu at ${new Date().toISOString()}`);
+        // User is already working, show working user main menu
+        const { MessageHandler } = await import('./MessageHandler');
+        const { Database } = await import('../database/Database');
+        const { Logger } = await import('../utils/Logger');
+        const database = new Database();
+        const logger = new Logger();
+        const messageHandler = new MessageHandler(this.bot, database, logger);
+        await messageHandler.showWorkingUserMainMenu(msg.chat.id, userId, userStatus.name);
+        console.log(`[CandidateStep1Flow] Main menu sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
         return;
       }
       
-      // Handle text input for current question
-      await this.handleTextResponse(msg);
-    });
+      console.log(`[CandidateStep1Flow] Starting application flow at ${new Date().toISOString()}`);
+      // Clear any existing course session to prevent conflicts
+      courseSessions.delete(msg.from!.id);
+      
+      this.sessions.set(msg.from!.id, { lang: 'en', answers: {}, step: -1, lastActivity: Date.now() });
+      await this.askLanguage(msg.chat.id);
+      console.log(`[CandidateStep1Flow] Language question sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
+    } catch (error) {
+      console.error('[CandidateStep1Flow] Error checking user status:', error);
+      // Continue with application flow if there's an error
+    } finally {
+      // Always remove user from processing set
+      processingUsers.delete(userId);
+      console.log(`[CandidateStep1Flow] User ${userId} removed from processing`);
+    }
   }
 
   private async askLanguage(chatId: number) {

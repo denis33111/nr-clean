@@ -113,7 +113,7 @@ async function main() {
 
     // Initialize candidate Step 1 flow
     console.log('[DEBUG] Initializing CandidateStep1Flow...');
-    new CandidateStep1Flow((bot as any).bot, sheetsClient);
+    const candidateStep1Flow = new CandidateStep1Flow((bot as any).bot, sheetsClient);
     console.log('[DEBUG] CandidateStep1Flow initialized successfully');
 
     // Initialize ReminderService ONCE
@@ -128,10 +128,13 @@ async function main() {
 
     // Initialize candidate course answer flow (Step 3 interactions)
     console.log('[DEBUG] Initializing CandidateCourseFlow...');
-    new CandidateCourseFlow((bot as any).bot, sheetsClient);
+    const candidateCourseFlow = new CandidateCourseFlow((bot as any).bot, sheetsClient);
     console.log('[DEBUG] CandidateCourseFlow initialized successfully');
 
-    // AdminStep2Flow handles its own callbacks through setupHandlers()
+    // Store flow instances in bot for webhook access
+    (bot as any).candidateStep1Flow = candidateStep1Flow;
+    (bot as any).adminStep2Flow = adminStep2Flow;
+    (bot as any).candidateCourseFlow = candidateCourseFlow;
 
     console.log('[DEBUG] All services initialized successfully!');
 
