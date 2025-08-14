@@ -162,8 +162,9 @@ export class Bot {
     // Special handling for /start command
     if (command === '/start') {
       if (chatType === 'private') {
-        // Private chat: Let CandidateStep1Flow handle it directly (it has its own onText handler)
-        // Don't route through CommandHandler to avoid duplication
+        // Private chat: Handle new candidate registration
+        console.log(`[DEBUG] /start command from new candidate, handling registration`);
+        await this.routeMessage(msg);
         return;
       } else if (chatType === 'group' || chatType === 'supergroup') {
         // Group chat: Handle admin start command
@@ -180,8 +181,24 @@ export class Bot {
     const chatType = msg.chat.type;
     const userId = msg.from!.id;
     const chatId = msg.chat.id;
+    const text = msg.text?.trim() || '';
     
-    console.log(`[DEBUG] Routing message from user ${userId} in ${chatType} chat: ${msg.text}`);
+    console.log(`[DEBUG] Routing message from user ${userId} in ${chatType} chat: ${text}`);
+    
+    // Special handling for /start command in private chats
+    if (text.startsWith('/start') && chatType === 'private') {
+      console.log(`[DEBUG] /start command in private chat, checking CandidateStep1Flow`);
+      // Import and check if user is in candidate flow
+      const { candidateSessions } = await import('./CandidateStep1Flow');
+      const isInCandidateFlow = candidateSessions.has(userId);
+      
+      if (!isInCandidateFlow) {
+        console.log(`[DEBUG] New candidate ${userId}, starting registration flow`);
+        // Trigger the CandidateStep1Flow start process manually
+        await this.triggerCandidateStart(msg);
+        return;
+      }
+    }
     
     // Check if user is in any active flow first
     const { candidateSessions } = await import('./CandidateStep1Flow');
@@ -216,6 +233,28 @@ export class Bot {
     await this.messageHandler.handleMessage(msg);
   }
 
+  // Helper method to trigger candidate start flow
+  private async triggerCandidateStart(msg: TelegramBot.Message): Promise<void> {
+    try {
+      // Import CandidateStep1Flow and trigger the start process
+      const { CandidateStep1Flow } = await import('./CandidateStep1Flow');
+      // Since we can't easily access the instance, we'll send a welcome message
+      const welcomeMsg = `🎯 Welcome to Newrest! Let's get you started with your application.\n\nPlease answer the following questions to complete your registration:`;
+      
+      await this.bot.sendMessage(msg.chat.id, welcomeMsg);
+      
+      // Start the first question
+      const firstQuestion = "What is your full name?";
+      await this.bot.sendMessage(msg.chat.id, firstQuestion);
+      
+      console.log(`[DEBUG] Started candidate registration flow for user ${msg.from!.id}`);
+    } catch (error) {
+      console.error('[DEBUG] Error starting candidate flow:', error);
+      // Fallback to MessageHandler
+      await this.messageHandler.handleMessage(msg);
+    }
+  }
+
   async start(): Promise<void> {
     try {
       const webhookUrl = `https://telegram-bot-5kmf.onrender.com/webhook`;
@@ -236,6 +275,8 @@ export class Bot {
   handleWebhookUpdate(update: any): void {
     try {
       if (update.message) {
+        // Route all messages through the normal flow
+        // CandidateStep1Flow will handle /start commands via its onText handler
         this.routeMessage(update.message);
       } else if (update.callback_query) {
         this.callbackQueryHandler.handleCallbackQuery(update.callback_query);
