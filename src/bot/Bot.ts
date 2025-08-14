@@ -186,7 +186,9 @@ export class Bot {
     console.log(`[DEBUG] Routing message from user ${userId} in ${chatType} chat: ${text}`);
 
     // Check if user is in any active flow
-    const { candidateSessions, adminSessions, courseSessions } = await import('./CandidateStep1Flow');
+    const { candidateSessions } = await import('./CandidateStep1Flow');
+    const { adminSessions } = await import('./AdminStep2Flow');
+    const { courseSessions } = await import('./CandidateCourseFlow');
     const isInCandidateFlow = candidateSessions.has(userId);
     const isInAdminFlow = adminSessions.has(userId);
     const isInCourseFlow = courseSessions.has(userId);

@@ -575,11 +575,18 @@ export class AdminStep2Flow {
   // Handle reschedule callback from admin
   private async handleRescheduleCallback(q: TelegramBot.CallbackQuery): Promise<void> {
     try {
+      if (!q.message) return;
+      
       const parts = q.data!.split('_');
       if (parts.length < 3) return;
       
-      const row = parseInt(parts[1], 10);
-      const userId = parseInt(parts[2], 10);
+      const rowStr = parts[1];
+      const userIdStr = parts[2];
+      
+      if (!rowStr || !userIdStr) return;
+      
+      const row = parseInt(rowStr, 10);
+      const userId = parseInt(userIdStr, 10);
       
       if (isNaN(row) || isNaN(userId)) return;
 
@@ -595,14 +602,16 @@ export class AdminStep2Flow {
       await this.bot.answerCallbackQuery(q.id);
       
       // Ask admin for new course date
-      await this.bot.sendMessage(q.message!.chat.id, 
+      await this.bot.sendMessage(q.message.chat.id, 
         `📅 **Reschedule Course**\n\nPlease enter the new course date in format: **YYYY-MM-DD**\n\nExample: 2025-08-20`,
         { parse_mode: 'Markdown' }
       );
 
     } catch (error) {
       console.error('[AdminStep2Flow] Error handling reschedule callback:', error);
-      await this.bot.answerCallbackQuery(q.id, '❌ Error processing reschedule request.');
+      if (q.message) {
+        await this.bot.answerCallbackQuery(q.id, { text: '❌ Error processing reschedule request.' });
+      }
     }
   }
 
