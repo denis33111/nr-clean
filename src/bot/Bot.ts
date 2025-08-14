@@ -238,16 +238,34 @@ export class Bot {
     try {
       // Import CandidateStep1Flow and trigger the start process
       const { CandidateStep1Flow } = await import('./CandidateStep1Flow');
-      // Since we can't easily access the instance, we'll send a welcome message
-      const welcomeMsg = `🎯 Welcome to Newrest! Let's get you started with your application.\n\nPlease answer the following questions to complete your registration:`;
       
-      await this.bot.sendMessage(msg.chat.id, welcomeMsg);
+      // The CandidateStep1Flow has its own onText handler for /start
+      // We need to trigger it manually since we're in webhook mode
+      // Let's simulate the start process by creating a session and asking language
       
-      // Start the first question
-      const firstQuestion = "What is your full name?";
-      await this.bot.sendMessage(msg.chat.id, firstQuestion);
+      const { candidateSessions } = await import('./CandidateStep1Flow');
+      const userId = msg.from!.id;
       
-      console.log(`[DEBUG] Started candidate registration flow for user ${msg.from!.id}`);
+      // Create a new session and start with language selection
+      candidateSessions.set(userId, { 
+        lang: 'en', 
+        answers: {}, 
+        step: -1, 
+        lastActivity: Date.now() 
+      });
+      
+      // Ask for language preference
+      const languageMsg = `🌍 Please select your preferred language:\n\n🌍 Επιλέξτε την προτιμώμενη γλώσσα σας:`;
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: '🇬🇧 English', callback_data: 'lang_en' }],
+          [{ text: '🇬🇷 Ελληνικά', callback_data: 'lang_gr' }]
+        ]
+      };
+      
+      await this.bot.sendMessage(msg.chat.id, languageMsg, { reply_markup: keyboard });
+      
+      console.log(`[DEBUG] Started candidate registration flow for user ${userId} with language selection`);
     } catch (error) {
       console.error('[DEBUG] Error starting candidate flow:', error);
       // Fallback to MessageHandler
