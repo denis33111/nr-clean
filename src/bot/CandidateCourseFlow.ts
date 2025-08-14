@@ -106,33 +106,75 @@ export class CandidateCourseFlow {
 
   // ---------------- handlers -----------------
   private async handleYes(userId: number, callbackId: string, chatId: number) {
-    const { row, current, header } = await this.getRowData(userId);
-    if (row === -1) return;
-    
-    // Update session activity
-    const session = this.sessions.get(userId);
-    if (session) {
-      session.lastActivity = Date.now();
-    }
-    
-    const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
+    try {
+      const { row, current, header } = await this.getRowData(userId);
+      if (row === -1) return;
+      
+      // Update session activity
+      const session = this.sessions.get(userId);
+      if (session) {
+        session.lastActivity = Date.now();
+      }
+      
+      const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
 
-    header.forEach((h, idx) => {
-      const key = normalise(h);
-      if (key === 'COURSECONFIRMED') current[idx] = 'YES';
-      if (key === 'STATUS') current[idx] = 'WORKING';
-      if (key === 'REMINDER' || key === 'REMINDERSENT') current[idx] = '';
-      if (key === 'STEP3') current[idx] = 'done';
-    });
-    const range = `A${row}:${String.fromCharCode(65 + header.length - 1)}${row}`;
-    await this.sheets.updateRow(range, current);
-    const candidateName = this.getName(header, current) || userId.toString();
-    await this.notifyAdmins(`✅ ${candidateName} επιβεβαίωσε τη συμμετοχή στο μάθημα.`);
-    const lang = this.getLang(header, current);
-    // Toast for button press
-    await this.safeAnswer(callbackId, lang==='gr' ? 'Ευχαριστούμε!' : 'Thank you!');
-    // Explicit chat confirmation so conversation shows it
-    await this.bot.sendMessage(chatId, lang==='gr' ? 'Ευχαριστούμε! Τα λέμε αύριο στο μάθημα! 🎉' : 'Thank you! See you tomorrow at the course! 🎉');
+      header.forEach((h, idx) => {
+        const key = normalise(h);
+        if (key === 'COURSECONFIRMED') current[idx] = 'YES';
+        if (key === 'STATUS') current[idx] = 'WORKING';
+        if (key === 'REMINDER' || key === 'REMINDERSENT') current[idx] = '';
+        if (key === 'STEP3') current[idx] = 'done';
+      });
+      
+      const range = `A${row}:${String.fromCharCode(65 + header.length - 1)}${row}`;
+      
+      // Add error handling for Google Sheets update
+      try {
+        await this.sheets.updateRow(range, current);
+        console.log(`[CandidateCourseFlow] Successfully updated user ${userId} status to WORKING`);
+      } catch (sheetsError) {
+        console.error(`[CandidateCourseFlow] Failed to update Google Sheets for user ${userId}:`, sheetsError);
+        // Send error message to user
+        await this.bot.sendMessage(chatId, '❌ Sorry, there was an error updating your status. Please try again later.');
+        return;
+      }
+      
+      const candidateName = this.getName(header, current) || userId.toString();
+      
+      // Add error handling for admin notification
+      try {
+        await this.notifyAdmins(`✅ ${candidateName} επιβεβαίωσε τη συμμετοχή στο μάθημα.`);
+      } catch (notifyError) {
+        console.error(`[CandidateCourseFlow] Failed to notify admins for user ${userId}:`, notifyError);
+        // Continue with user notification even if admin notification fails
+      }
+      
+      const lang = this.getLang(header, current);
+      
+      // Toast for button press
+      try {
+        await this.safeAnswer(callbackId, lang==='gr' ? 'Ευχαριστούμε!' : 'Thank you!');
+      } catch (answerError) {
+        console.error(`[CandidateCourseFlow] Failed to answer callback for user ${userId}:`, answerError);
+      }
+      
+      // Explicit chat confirmation so conversation shows it
+      try {
+        await this.bot.sendMessage(chatId, lang==='gr' ? 'Ευχαριστούμε! Τα λέμε αύριο στο μάθημα! 🎉' : 'Thank you! See you tomorrow at the course! 🎉');
+        console.log(`[CandidateCourseFlow] Successfully completed course confirmation for user ${userId}`);
+      } catch (messageError) {
+        console.error(`[CandidateCourseFlow] Failed to send confirmation message to user ${userId}:`, messageError);
+      }
+      
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Critical error in handleYes for user ${userId}:`, error);
+      // Try to send error message to user
+      try {
+        await this.bot.sendMessage(chatId, '❌ Sorry, something went wrong. Please try again later.');
+      } catch (sendError) {
+        console.error(`[CandidateCourseFlow] Failed to send error message to user ${userId}:`, sendError);
+      }
+    }
   }
 
   // ----- decline workflow -----
@@ -177,44 +219,58 @@ export class CandidateCourseFlow {
 
 
   private async finalDecline(userId: number, callbackId: string, chatId: number, tag: string) {
-    await this.safeAnswer(callbackId);
-    const { row, current, header } = await this.getRowData(userId);
-    if (row === -1) return;
-    const lang = this.getLang(header, current);
-    
-    // Update session activity
-    const session = this.sessions.get(userId);
-    if (session) {
-      session.lastActivity = Date.now();
+    try {
+      await this.safeAnswer(callbackId);
+      const { row, current, header } = await this.getRowData(userId);
+      if (row === -1) return;
+      const lang = this.getLang(header, current);
+      
+      // Update session activity
+      const session = this.sessions.get(userId);
+      if (session) {
+        session.lastActivity = Date.now();
+      }
+      
+      const message = tag === 'NOT_INTERESTED' 
+        ? (lang === 'gr' 
+            ? 'Καταλαβαίνουμε. Σας ευχαριστούμε για το ενδιαφέρον και σας ευχόμαστε καλή συνέχεια! 👋'
+            : 'We understand. Thank you for your interest and we wish you all the best! 👋')
+        : (lang === 'gr'
+            ? 'Σας ευχαριστούμε που μας ενημερώσατε. Σας ευχόμαστε καλή συνέχεια!'
+            : 'Thank you for letting us know. We wish you all the best!');
+      
+      await this.bot.sendMessage(chatId, message);
+      
+      const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
+      header.forEach((h, idx) => {
+        const key = normalise(h);
+        if (key === 'COURSECONFIRMED') current[idx] = 'NO';
+        if (key === 'STATUS') current[idx] = 'STOP';
+        if (key === 'STEP3') current[idx] = 'cancelled';
+      });
+      
+      const range = `A${row}:${String.fromCharCode(65 + header.length - 1)}${row}`;
+      
+      // Add error handling for Google Sheets update
+      try {
+        await this.sheets.updateRow(range, current);
+        console.log(`[CandidateCourseFlow] Successfully updated user ${userId} status to STOP`);
+      } catch (sheetsError) {
+        console.error(`[CandidateCourseFlow] Failed to update Google Sheets for user ${userId}:`, sheetsError);
+        // Send error message to user
+        await this.bot.sendMessage(chatId, '❌ Sorry, there was an error updating your status. Please try again later.');
+        return;
+      }
+      
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Critical error in finalDecline for user ${userId}:`, error);
+      // Try to send error message to user
+      try {
+        await this.bot.sendMessage(chatId, '❌ Sorry, something went wrong. Please try again later.');
+      } catch (sendError) {
+        console.error(`[CandidateCourseFlow] Failed to send error message to user ${userId}:`, sendError);
+      }
     }
-    
-    const message = tag === 'NOT_INTERESTED' 
-      ? (lang === 'gr' 
-          ? 'Καταλαβαίνουμε. Σας ευχαριστούμε για το ενδιαφέρον και σας ευχόμαστε καλή συνέχεια! 👋'
-          : 'We understand. Thank you for your interest and we wish you all the best! 👋')
-      : (lang === 'gr'
-          ? 'Σας ευχαριστούμε που μας ενημερώσατε. Σας ευχόμαστε καλή συνέχεια!'
-          : 'Thank you for letting us know. We wish you all the best!');
-    
-    await this.bot.sendMessage(chatId, message);
-    
-    const normalise = (s: string) => s.replace(/\s|_/g, '').toUpperCase();
-    header.forEach((h, idx) => {
-      const key = normalise(h);
-      if (key === 'COURSECONFIRMED') current[idx] = 'NO';
-      if (key === 'STATUS') current[idx] = 'STOP';
-      if (key === 'STEP3') current[idx] = 'cancelled';
-    });
-    const range = `A${row}:${String.fromCharCode(65 + header.length - 1)}${row}`;
-    await this.sheets.updateRow(range, current);
-    
-    const candidateName = this.getName(header, current) || userId.toString();
-    const adminMessage = tag === 'NOT_INTERESTED'
-      ? `❌ ${candidateName} δεν ενδιαφέρεται πλέον για τη θέση.`
-      : `❌ ${candidateName} αρνήθηκε το μάθημα.`;
-    
-    await this.notifyAdmins(adminMessage);
-    this.sessions.delete(userId);
   }
 
   private async startReschedule(userId: number, callbackId: string, chatId: number) {
