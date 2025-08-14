@@ -201,19 +201,19 @@ export class Bot {
       
       if (isInCandidateFlow && (this as any).candidateStep1Flow) {
         console.log(`[DEBUG] Routing message to CandidateStep1Flow`);
-        // Let CandidateStep1Flow handle the message through its message handler
-        return; // The flow will handle it through its own message handler
+        await (this as any).candidateStep1Flow.handleMessage(msg);
+        return;
       }
       
       if (isInAdminFlow && (this as any).adminStep2Flow) {
         console.log(`[DEBUG] Routing message to AdminStep2Flow`);
-        // Let AdminStep2Flow handle the message
+        await (this as any).adminStep2Flow.handleMessage(msg);
         return;
       }
       
       if (isInCourseFlow && (this as any).candidateCourseFlow) {
         console.log(`[DEBUG] Routing message to CandidateCourseFlow`);
-        // Let CandidateCourseFlow handle the message
+        await (this as any).candidateCourseFlow.handleMessage(msg);
         return;
       }
     }
@@ -316,13 +316,13 @@ export class Bot {
       
       if (isInAdminFlow && (this as any).adminStep2Flow) {
         console.log(`[DEBUG] Routing callback query to AdminStep2Flow`);
-        // AdminStep2Flow handles its own callbacks through setupHandlers
+        await (this as any).adminStep2Flow.handleCallbackQuery(query);
         return;
       }
       
       if (isInCourseFlow && (this as any).candidateCourseFlow) {
         console.log(`[DEBUG] Routing callback query to CandidateCourseFlow`);
-        // CandidateCourseFlow handles its own callbacks through setupHandlers
+        await (this as any).candidateCourseFlow.handleCallbackQuery(query);
         return;
       }
       

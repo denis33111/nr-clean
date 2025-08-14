@@ -137,134 +137,9 @@ export class AdminStep2Flow {
       await this.handleNextStep(msg.from.id, msg.chat.id);
     });
 
-    // Handle callback queries for reschedule actions
-    this.bot.on('callback_query', async (q) => {
-      if (!q.from || !q.data) return;
-      // Only process AdminStep2Flow-specific callbacks
-      const isAdminStep2Callback = q.data.startsWith('step2_') || 
-                                  q.data.startsWith('a2_') || 
-                                  q.data.startsWith('cdate_') || 
-                                  q.data === 'rej_only' || 
-                                  q.data === 'rej_alt' ||
-                                  q.data.startsWith('reschedule_');
-      if (!isAdminStep2Callback) {
-        // Not an AdminStep2Flow callback, ignore it
-        return;
-      }
-      console.log(`[AdminStep2Flow] Callback received: ${q.data} from user ${q.from.id} in chat ${q.message?.chat.id} (type: ${q.message?.chat.type})`);
-      // Only allow in group chats, not private chats
-      if (q.message?.chat.type === 'private') {
-        console.log(`[AdminStep2Flow] Skipping private chat callback: ${q.data}`);
-        return;
-      }
-      
-      if (q.data.startsWith('reschedule_')) {
-        await this.handleRescheduleCallback(q);
-        return;
-      }
-      
-      if (q.data.startsWith('step2_')) {
-        console.log(`[AdminStep2Flow] Processing step2 callback: ${q.data}`);
-        const row = parseInt(q.data.replace('step2_', ''), 10);
-        if (isNaN(row)) {
-          console.log(`[AdminStep2Flow] Invalid row number in callback: ${q.data}`);
-          return;
-        }
-        console.log(`[AdminStep2Flow] Checking admin permissions for user ${q.from.id}`);
-        const isAdmin = await this.adminService.isAdmin(q.from.id, q.message!.chat.id, this.bot);
-        console.log(`[AdminStep2Flow] Admin check result for user ${q.from.id}: ${isAdmin}`);
-        if (!isAdmin) return;
-        this.sessions.set(q.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });
-        await this.handleNextStep(q.from.id, q.message!.chat.id);
-      } else if (q.data.startsWith('a2_')) {
-        const value = q.data.substring(3);
-        console.log(`[AdminStep2Flow] Processing a2_ callback: ${value}`);
-        const sess = this.sessions.get(q.from.id);
-        if (!sess) return;
-        const dynQuestions = this.getQuestions(sess);
-        const question = dynQuestions[sess.step];
-        if (question) {
-          const k = question.key.replace(/\s|_/g, '').toUpperCase();
-          sess.answers[k] = value;
-          if (k === 'AGREED') sess.agreed = /yes/i.test(value);
-          if (k === 'POSITION') sess.position = value;
-          sess.step++;
-          console.log(`[AdminStep2Flow] Updated session for user ${q.from.id}: step=${sess.step}, agreed=${sess.agreed}`);
-        }
-        await this.bot.answerCallbackQuery(q.id);
-        await this.handleNextStep(q.from.id, q.message!.chat.id);
-      }
-
-      // Handle rejection choice callbacks
-      if (q.data === 'rej_only' || q.data === 'rej_alt') {
-        console.log(`[AdminStep2Flow] Processing rejection choice: ${q.data}`);
-        const sess = this.sessions.get(q.from.id);
-        if (!sess) return;
-        sess.rejectionChoice = q.data === 'rej_only' ? 'only' : 'alt';
-        // Answer callback to remove loading spinner
-        await this.bot.answerCallbackQuery(q.id);
-        // Proceed to finish and save
-        await this.saveAndFinish(q.from.id, q.message!.chat.id);
-        return;
-      }
-
-      // Handle preset course date buttons
-      if (q.data.startsWith('cdate_')) {
-        console.log(`[AdminStep2Flow] Processing course date callback: ${q.data}`);
-        const sess = this.sessions.get(q.from.id);
-        if (!sess) return;
-        const dateStr = q.data.replace('cdate_', '');
-        if (dateStr === 'custom') {
-          sess.awaitingCustomDate = true;
-          await this.bot.answerCallbackQuery(q.id);
-          await this.bot.sendMessage(q.message!.chat.id, 'Enter course date (e.g. 2025-07-18):', {
-            reply_markup: { force_reply: true }
-          });
-        } else {
-          sess.answers['COURSEDATE'] = dateStr;
-          sess.step = 3; // move to notes
-          await this.bot.answerCallbackQuery(q.id);
-          await this.handleNextStep(q.from.id, q.message!.chat.id);
-        }
-        return;
-      }
-    });
-
-    // Handle text messages for reschedule flow and regular admin flow
-    this.bot.on('message', async (msg) => {
-      if (!msg.from || !msg.text || msg.text.startsWith('/')) return;
-      // Only allow in group chats, not private chats
-      if (msg.chat.type === 'private') return;
-      
-      const session = this.sessions.get(msg.from.id);
-      if (!session) return;
-
-      // Handle reschedule date input
-      if (session.awaitingRescheduleDate) {
-        await this.handleNewCourseDate(msg.from.id, msg.text.trim(), msg.chat.id);
-        return;
-      }
-
-      // Handle regular admin flow
-      if (msg.text && !msg.text.startsWith('/')) {
-        // Handle custom date input first (special case)
-        if (session.awaitingCustomDate) {
-          session.answers['COURSEDATE'] = msg.text.trim();
-          session.awaitingCustomDate = false;
-          session.step = 3; // notes
-          await this.handleNextStep(msg.from.id, msg.chat.id);
-          return;
-        }
-        // Handle regular questions
-        const question = this.getQuestions(session)[session.step];
-        if (question) {
-          const k = question.key.replace(/\s|_/g, '').toUpperCase();
-          session.answers[k] = msg.text.trim();
-          session.step++;
-          await this.handleNextStep(msg.from.id, msg.chat.id);
-        }
-      }
-    });
+    // Remove on('callback_query') handlers - they don't work in webhook mode
+    // Remove on('message') handlers - they don't work in webhook mode either
+    // Instead, we'll handle everything through the webhook system
   }
 
   private async handleNextStep(userId: number, chatId: number) {
@@ -690,6 +565,140 @@ export class AdminStep2Flow {
     } catch (error) {
       console.error('[AdminStep2Flow] Error handling new course date:', error);
       await this.bot.sendMessage(chatId, '❌ Error updating course date. Please try again.');
+    }
+  }
+
+  // Public method to handle messages from webhook system
+  public async handleMessage(msg: TelegramBot.Message): Promise<void> {
+    if (!msg.text || !msg.from) return;
+    
+    const userId = msg.from.id;
+    const session = this.sessions.get(userId);
+    
+    if (!session) return;
+    
+    console.log(`[AdminStep2Flow] Processing message from admin ${userId}: "${msg.text}"`);
+    
+    // Handle reschedule date input
+    if (session.awaitingRescheduleDate) {
+      await this.handleNewCourseDate(userId, msg.text.trim(), msg.chat.id);
+      return;
+    }
+
+    // Handle regular admin flow
+    if (msg.text && !msg.text.startsWith('/')) {
+      // Handle custom date input first (special case)
+      if (session.awaitingCustomDate) {
+        session.answers['COURSEDATE'] = msg.text.trim();
+        session.awaitingCustomDate = false;
+        session.step = 3; // notes
+        await this.handleNextStep(userId, msg.chat.id);
+        return;
+      }
+      // Handle regular questions
+      const question = this.getQuestions(session)[session.step];
+      if (question) {
+        const k = question.key.replace(/\s|_/g, '').toUpperCase();
+        session.answers[k] = msg.text.trim();
+        session.step++;
+        await this.handleNextStep(userId, msg.chat.id);
+      }
+    }
+    
+    // Handle other admin message flows here if needed
+    console.log(`[AdminStep2Flow] Admin ${userId} sent message but no handler for: "${msg.text}"`);
+  }
+
+  // Public method to handle callback queries from webhook system
+  public async handleCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
+    if (!query.from || !query.data) return;
+    // Only process AdminStep2Flow-specific callbacks
+    const isAdminStep2Callback = query.data.startsWith('step2_') || 
+                                query.data.startsWith('a2_') || 
+                                query.data.startsWith('cdate_') || 
+                                query.data === 'rej_only' || 
+                                query.data === 'rej_alt' ||
+                                query.data.startsWith('reschedule_');
+    if (!isAdminStep2Callback) {
+      // Not an AdminStep2Flow callback, ignore it
+      return;
+    }
+    console.log(`[AdminStep2Flow] Callback received: ${query.data} from user ${query.from.id} in chat ${query.message?.chat.id} (type: ${query.message?.chat.type})`);
+    // Only allow in group chats, not private chats
+    if (query.message?.chat.type === 'private') {
+      console.log(`[AdminStep2Flow] Skipping private chat callback: ${query.data}`);
+      return;
+    }
+    
+    if (query.data.startsWith('reschedule_')) {
+      await this.handleRescheduleCallback(query);
+      return;
+    }
+    
+    if (query.data.startsWith('step2_')) {
+      console.log(`[AdminStep2Flow] Processing step2 callback: ${query.data}`);
+      const row = parseInt(query.data.replace('step2_', ''), 10);
+      if (isNaN(row)) {
+        console.log(`[AdminStep2Flow] Invalid row number in callback: ${query.data}`);
+        return;
+      }
+      console.log(`[AdminStep2Flow] Checking admin permissions for user ${query.from.id}`);
+      const isAdmin = await this.adminService.isAdmin(query.from.id, query.message!.chat.id, this.bot);
+      console.log(`[AdminStep2Flow] Admin check result for user ${query.from.id}: ${isAdmin}`);
+      if (!isAdmin) return;
+      this.sessions.set(query.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });
+      await this.handleNextStep(query.from.id, query.message!.chat.id);
+    } else if (query.data.startsWith('a2_')) {
+      const value = query.data.substring(3);
+      console.log(`[AdminStep2Flow] Processing a2_ callback: ${value}`);
+      const sess = this.sessions.get(query.from.id);
+      if (!sess) return;
+      const dynQuestions = this.getQuestions(sess);
+      const question = dynQuestions[sess.step];
+      if (question) {
+        const k = question.key.replace(/\s|_/g, '').toUpperCase();
+        sess.answers[k] = value;
+        if (k === 'AGREED') sess.agreed = /yes/i.test(value);
+        if (k === 'POSITION') sess.position = value;
+        sess.step++;
+        console.log(`[AdminStep2Flow] Updated session for user ${query.from.id}: step=${sess.step}, agreed=${sess.agreed}`);
+      }
+      await this.bot.answerCallbackQuery(query.id);
+      await this.handleNextStep(query.from.id, query.message!.chat.id);
+    }
+
+    // Handle rejection choice callbacks
+    if (query.data === 'rej_only' || query.data === 'rej_alt') {
+      console.log(`[AdminStep2Flow] Processing rejection choice: ${query.data}`);
+      const sess = this.sessions.get(query.from.id);
+      if (!sess) return;
+      sess.rejectionChoice = query.data === 'rej_only' ? 'only' : 'alt';
+      // Answer callback to remove loading spinner
+      await this.bot.answerCallbackQuery(query.id);
+      // Proceed to finish and save
+      await this.saveAndFinish(query.from.id, query.message!.chat.id);
+      return;
+    }
+
+    // Handle preset course date buttons
+    if (query.data.startsWith('cdate_')) {
+      console.log(`[AdminStep2Flow] Processing course date callback: ${query.data}`);
+      const sess = this.sessions.get(query.from.id);
+      if (!sess) return;
+      const dateStr = query.data.replace('cdate_', '');
+      if (dateStr === 'custom') {
+        sess.awaitingCustomDate = true;
+        await this.bot.answerCallbackQuery(query.id);
+        await this.bot.sendMessage(query.message!.chat.id, 'Enter course date (e.g. 2025-07-18):', {
+          reply_markup: { force_reply: true }
+        });
+      } else {
+        sess.answers['COURSEDATE'] = dateStr;
+        sess.step = 3; // move to notes
+        await this.bot.answerCallbackQuery(query.id);
+        await this.handleNextStep(query.from.id, query.message!.chat.id);
+      }
+      return;
     }
   }
 } 

@@ -62,46 +62,9 @@ export class CandidateCourseFlow {
   }
 
   private setupHandlers() {
-    // Handle course_* callback buttons
-    this.bot.on('callback_query', async (q) => {
-      if (!q.data || !q.from) return;
-      // Only allow in private chats, not group chats
-      if (q.message?.chat.type !== 'private') return;
-      
-      const uid = q.from.id;
-
-      if (q.data === 'course_yes') {
-        await this.handleYes(uid, q.id, q.message!.chat.id);
-      } else if (q.data === 'course_no') {
-        await this.startDecline(uid, q.id, q.message!.chat.id);
-      } else if (q.data === 'course_decline') {
-        await this.finalDecline(uid, q.id, q.message!.chat.id, 'NOT_INTERESTED');
-      } else if (q.data === 'course_reschedule') {
-        await this.startReschedule(uid, q.id, q.message!.chat.id);
-      } else if (q.data === 'alt_yes') {
-        await this.handleAltYes(uid, q.id, q.message!.chat.id);
-      } else if (q.data === 'alt_no') {
-        await this.handleAltNo(uid, q.id, q.message!.chat.id);
-      }
-    });
-
-    // Capture free-text replies (reschedule reason)
-    this.bot.on('message', async (msg) => {
-      if (!msg.from || !msg.text || msg.text.startsWith('/')) return;
-      // Only allow in private chats, not group chats
-      if (msg.chat.type !== 'private') return;
-      
-      const sess = this.sessions.get(msg.from.id);
-      if (!sess) return;
-
-      // Reschedule reason
-      if (sess.awaitingReason) {
-        await this.saveRescheduleReason(msg.from.id, msg.text.trim(), msg.chat.id, sess.row);
-        // Keep session for a bit so other handlers skip duplicate replies
-        setTimeout(() => this.sessions.delete(msg.from!.id), 10000);
-        return;
-      }
-    });
+    // Remove on('callback_query') handlers - they don't work in webhook mode
+    // Remove on('message') handlers - they don't work in webhook mode either
+    // Instead, we'll handle everything through the webhook system
   }
 
   // ---------------- handlers -----------------
@@ -503,6 +466,55 @@ export class CandidateCourseFlow {
       await this.bot.answerCallbackQuery(id, text ? { text } : undefined);
     } catch (err: any) {
       if (err?.code !== 'ETELEGRAM') console.error(err);
+    }
+  }
+
+  // Public method to handle messages from webhook system
+  public async handleMessage(msg: TelegramBot.Message): Promise<void> {
+    if (!msg.from || !msg.text || msg.text.startsWith('/')) return;
+    // Only allow in private chats, not group chats
+    if (msg.chat.type !== 'private') return;
+    
+    const userId = msg.from.id;
+    const session = this.sessions.get(userId);
+    
+    if (!session) return;
+    
+    console.log(`[CandidateCourseFlow] Processing message from user ${userId}: "${msg.text}"`);
+    
+    // Handle reschedule reason
+    if (session.awaitingReason) {
+      await this.saveRescheduleReason(userId, msg.text.trim(), msg.chat.id, session.row);
+      // Keep session for a bit so other handlers skip duplicate replies
+      setTimeout(() => this.sessions.delete(userId), 10000);
+      return;
+    }
+    
+    // Handle other course flow messages here if needed
+    console.log(`[CandidateCourseFlow] User ${userId} sent message but no handler for: "${msg.text}"`);
+  }
+
+  // Public method to handle callback queries from webhook system
+  public async handleCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
+    if (!query.data || !query.from) return;
+    // Only allow in private chats, not group chats
+    if (query.message?.chat.type !== 'private') return;
+    
+    const userId = query.from.id;
+    console.log(`[CandidateCourseFlow] Processing callback query: ${query.data} from user ${userId}`);
+
+    if (query.data === 'course_yes') {
+      await this.handleYes(userId, query.id, query.message!.chat.id);
+    } else if (query.data === 'course_no') {
+      await this.startDecline(userId, query.id, query.message!.chat.id);
+    } else if (query.data === 'course_decline') {
+      await this.finalDecline(userId, query.id, query.message!.chat.id, 'NOT_INTERESTED');
+    } else if (query.data === 'course_reschedule') {
+      await this.startReschedule(userId, query.id, query.message!.chat.id);
+    } else if (query.data === 'alt_yes') {
+      await this.handleAltYes(userId, query.id, query.message!.chat.id);
+    } else if (query.data === 'alt_no') {
+      await this.handleAltNo(userId, query.id, query.message!.chat.id);
     }
   }
 } 

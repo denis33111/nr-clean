@@ -183,47 +183,52 @@ export class CandidateStep1Flow {
   private setupHandlers() {
     // Remove onText handlers - they don't work in webhook mode
     // Remove on('callback_query') handlers - they don't work in webhook mode either
+    // Remove on('message') handlers - they don't work in webhook mode either
     // Instead, we'll handle everything through the webhook system
+  }
+
+  // Public method to handle messages from webhook system
+  public async handleMessage(msg: TelegramBot.Message): Promise<void> {
+    if (!msg.text || !msg.from) return;
+    // Only allow in private chats, not group chats
+    if (msg.chat.type !== 'private') return;
     
-    this.bot.on('message', async (msg) => {
-      if (!msg.text || !msg.from) return;
-      // Only allow in private chats, not group chats
-      if (msg.chat.type !== 'private') return;
-      
-      const userId = msg.from.id;
-      const session = this.sessions.get(userId);
-      if (!session) return;
-      
-      // Skip if user is editing a specific answer
-      if (session.editingKey) {
-        await this.handleEditResponse(msg);
-        return;
-      }
-      
-      // Skip if user is in review mode
-      if (session.reviewing) {
-        await this.handleReviewResponse(msg);
-        return;
-      }
-      
-      // Regular question flow
-      if (session.step < QUESTIONS[session.lang].length) {
-        const question = QUESTIONS[session.lang][session.step];
-        if (question && !question.options) {
-          // Text question - save answer and move to next
-          session.answers[question.key] = msg.text.trim();
-          session.step++;
-          session.lastActivity = Date.now();
-          
-          if (session.step < QUESTIONS[session.lang].length) {
-            await this.askNext(userId, msg.chat.id);
-          } else {
-            session.reviewing = true;
-            await this.sendReview(userId, msg.chat.id);
-          }
+    const userId = msg.from.id;
+    const session = this.sessions.get(userId);
+    if (!session) return;
+    
+    console.log(`[CandidateStep1Flow] Processing message from user ${userId}: "${msg.text}"`);
+    
+    // Skip if user is editing a specific answer
+    if (session.editingKey) {
+      await this.handleEditResponse(msg);
+      return;
+    }
+    
+    // Skip if user is in review mode
+    if (session.reviewing) {
+      await this.handleReviewResponse(msg);
+      return;
+    }
+    
+    // Regular question flow
+    if (session.step < QUESTIONS[session.lang].length) {
+      const question = QUESTIONS[session.lang][session.step];
+      if (question && !question.options) {
+        // Text question - save answer and move to next
+        console.log(`[CandidateStep1Flow] Saving answer for question ${question.key}: "${msg.text}"`);
+        session.answers[question.key] = msg.text.trim();
+        session.step++;
+        session.lastActivity = Date.now();
+        
+        if (session.step < QUESTIONS[session.lang].length) {
+          await this.askNext(userId, msg.chat.id);
+        } else {
+          session.reviewing = true;
+          await this.sendReview(userId, msg.chat.id);
         }
       }
-    });
+    }
   }
 
   // Public method to handle callback queries from webhook system
