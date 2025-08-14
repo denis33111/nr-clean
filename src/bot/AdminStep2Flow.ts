@@ -81,65 +81,59 @@ export class AdminStep2Flow {
 
   // Public method to set up handlers (called from index.ts)
   public setupHandlers(): void {
-    // /pending2 command – list rows where STEP2 = pending
-    this.bot.onText(/\/pending2/, async (msg) => {
-      if (!msg.from) return;
-      // Only allow in group chats, not private chats
-      if (msg.chat.type === 'private') return;
-      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
-      const header = await this.sheets.getHeaderRow();
-      const dataRows = await this.sheets.getRows('A3:Z1000');
-      const rows: any[] = dataRows || [];
-      const colStep2 = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'STEP2');
-      const colName = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'NAME');
-      const pendingRows = rows
-        .map((r, idx) => ({ r, idx }))
-        .filter(({ r }) => r[colStep2] === 'pending');
-
-      if (pendingRows.length === 0) {
-        await this.bot.sendMessage(msg.chat.id, 'No candidates waiting for Step-2.');
-        return;
-      }
-
-      const keyboardRows = pendingRows.map(({ r, idx }) => [{
-        text: `${r[colName] || 'Unnamed'} (row ${idx + 3})`,
-        callback_data: `step2_${idx + 3}`
-      }]);
-
-      await this.bot.sendMessage(msg.chat.id, 'Pending Step-2 candidates:', {
-        reply_markup: { inline_keyboard: keyboardRows }
-      });
-    });
-
-    // /reschedule command – list candidates who requested reschedule
-    this.bot.onText(/\/reschedule/, async (msg) => {
-      if (!msg.from) return;
-      // Only allow in group chats, not private chats
-      if (msg.chat.type === 'private') return;
-      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
-      
-      await this.showRescheduleRequests(msg.chat.id);
-    });
-
-    // Handle inline button callback "step2_row" as well as /step2_row command
-    const startSession = async (row: number, chatId: number) => {
-      this.sessions.set(chatId, { row, step: 0, answers: {}, lastActivity: Date.now() });
-    };
-
-    this.bot.onText(/\/step2_(\d+)/, async (msg, match) => {
-      if (!msg.from || !match) return;
-      // Only allow in group chats, not private chats
-      if (msg.chat.type === 'private') return;
-      if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
-      const row = parseInt(match[1]!, 10);
-      if (isNaN(row)) return;
-      this.sessions.set(msg.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });
-      await this.handleNextStep(msg.from.id, msg.chat.id);
-    });
-
-    // Remove on('callback_query') handlers - they don't work in webhook mode
-    // Remove on('message') handlers - they don't work in webhook mode either
+    // Remove onText handlers - they don't work in webhook mode
     // Instead, we'll handle everything through the webhook system
+  }
+
+  // Public method to handle /pending2 command from webhook system
+  public async handlePending2Command(msg: TelegramBot.Message): Promise<void> {
+    if (!msg.from) return;
+    // Only allow in group chats, not private chats
+    if (msg.chat.type === 'private') return;
+    if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
+    
+    const header = await this.sheets.getHeaderRow();
+    const dataRows = await this.sheets.getRows('A3:Z1000');
+    const rows: any[] = dataRows || [];
+    const colStep2 = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'STEP2');
+    const colName = header.findIndex((h) => h.toUpperCase().replace(/\s/g, '') === 'NAME');
+    const pendingRows = rows
+      .map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => r[colStep2] === 'pending');
+
+    if (pendingRows.length === 0) {
+      await this.bot.sendMessage(msg.chat.id, 'No candidates waiting for Step-2.');
+      return;
+    }
+
+    const keyboardRows = pendingRows.map(({ r, idx }) => [{
+      text: `${r[colName] || 'Unnamed'} (row ${idx + 3})`,
+      callback_data: `step2_${idx + 3}`
+    }]);
+
+    await this.bot.sendMessage(msg.chat.id, 'Pending Step-2 candidates:', {
+      reply_markup: { inline_keyboard: keyboardRows }
+    });
+  }
+
+  // Public method to handle /reschedule command from webhook system
+  public async handleRescheduleCommand(msg: TelegramBot.Message): Promise<void> {
+    if (!msg.from) return;
+    // Only allow in group chats, not private chats
+    if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
+    
+    await this.showRescheduleRequests(msg.chat.id);
+  }
+
+  // Public method to handle /step2_row command from webhook system
+  public async handleStep2RowCommand(msg: TelegramBot.Message, row: number): Promise<void> {
+    if (!msg.from) return;
+    // Only allow in group chats, not private chats
+    if (msg.chat.type === 'private') return;
+    if (!(await this.adminService.isAdmin(msg.from.id, msg.chat.id, this.bot))) return;
+    
+    this.sessions.set(msg.from.id, { row, step: 0, answers: {}, lastActivity: Date.now() });
+    await this.handleNextStep(msg.from.id, msg.chat.id);
   }
 
   private async handleNextStep(userId: number, chatId: number) {

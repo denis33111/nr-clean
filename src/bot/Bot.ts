@@ -248,7 +248,27 @@ export class Bot {
       // Group chat - handle admin commands
       if (text.startsWith('/')) {
         console.log(`[DEBUG] Group chat with command: ${text}`);
-        // Let AdminStep2Flow handle admin commands
+        
+        // Route admin commands to AdminStep2Flow
+        if ((this as any).adminStep2Flow) {
+          if (text === '/pending2') {
+            await (this as any).adminStep2Flow.handlePending2Command(msg);
+            return;
+          } else if (text === '/reschedule') {
+            await (this as any).adminStep2Flow.handleRescheduleCommand(msg);
+            return;
+          } else if (text.match(/^\/step2_(\d+)$/)) {
+            const match = text.match(/^\/step2_(\d+)$/);
+            if (match && match[1]) {
+              const row = parseInt(match[1], 10);
+              await (this as any).adminStep2Flow.handleStep2RowCommand(msg, row);
+              return;
+            }
+          }
+        }
+        
+        // If no admin command matched, let MessageHandler handle it
+        this.messageHandler.handleMessage(msg);
         return;
       }
       
