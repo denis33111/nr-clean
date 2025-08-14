@@ -77,60 +77,8 @@ export class Bot {
   }
 
   private setupEventHandlers(): void {
-    // Single message handler that routes to appropriate handler
-    this.bot.on('message', async (msg) => {
-      if (!msg.from) return;
-      
-      const text = msg.text?.trim() || '';
-      const chatType = msg.chat.type;
-      const userId = msg.from.id;
-      
-      // Check if this user sent the same command recently (within 3 seconds)
-      const lastCommand = this.lastUserCommands.get(userId);
-      const now = Date.now();
-      
-      if (lastCommand && lastCommand.command === text && (now - lastCommand.timestamp) < 3000) {
-        console.log(`[Bot] Duplicate command from user ${userId} detected, skipping: ${text}`);
-        return;
-      }
-      
-      // Update last command for this user
-      this.lastUserCommands.set(userId, { command: text, timestamp: now });
-      
-      // Clean up old entries (keep only last 100 users)
-      if (this.lastUserCommands.size > 100) {
-        const entries = Array.from(this.lastUserCommands.entries());
-        const sortedEntries = entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
-        this.lastUserCommands = new Map(sortedEntries.slice(0, 50));
-      }
-      
-      console.log(`[Bot] Received message from user ${userId}:`, {
-        hasText: !!msg.text,
-        hasLocation: !!msg.location,
-        text: text,
-        location: msg.location
-      });
-      
-      // Skip /start commands - let CandidateStep1Flow handle them directly
-      if (text.startsWith('/start')) {
-        console.log(`[Bot] Skipping /start command - CandidateStep1Flow will handle it`);
-        return;
-      }
-      
-      // Route commands to appropriate handler
-      if (text.startsWith('/')) {
-        await this.routeCommand(msg);
-        return;
-      }
-      
-      // Route non-command messages through centralized router
-      await this.routeMessage(msg);
-    });
-
-    // Single callback query handler
-    this.bot.on('callback_query', async (query) => {
-      await this.callbackQueryHandler.handleCallbackQuery(query);
-    });
+    // Remove all event handlers - they don't work in webhook mode
+    // Instead, we handle everything through the webhook system
 
     // Handle errors
     this.bot.on('error', (error) => {
