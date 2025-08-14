@@ -23,8 +23,8 @@ export class Bot {
     this.database = database;
     this.logger = logger;
     
-    // Initialize bot with polling
-    this.bot = new TelegramBot(token, { polling: true });
+    // Initialize bot with webhook for Render.com
+    this.bot = new TelegramBot(token, { webHook: { port: 3000 } });
 
     // Patch answerCallbackQuery globally to ignore "query is too old" errors
     const originalAnswer = this.bot.answerCallbackQuery.bind(this.bot);
@@ -218,13 +218,30 @@ export class Bot {
 
   async start(): Promise<void> {
     try {
+      const webhookUrl = `https://telegram-bot-5kmf.onrender.com/webhook`;
+      await this.bot.setWebHook(webhookUrl);
+      
       // Set a custom start command that's more appropriate for working users
       await this.bot.setMyCommands([
         { command: 'start', description: 'Log In / Contact Crew' }
       ]);
-      this.logger.info('Bot started with custom start command');
+      
+      this.logger.info('Bot started with webhook at: ' + webhookUrl);
     } catch (error) {
       this.logger.error('Failed to start bot:', error);
+    }
+  }
+
+  // Method to handle webhook updates from Express
+  handleWebhookUpdate(update: any): void {
+    try {
+      if (update.message) {
+        this.routeMessage(update.message);
+      } else if (update.callback_query) {
+        this.callbackQueryHandler.handleCallbackQuery(update.callback_query);
+      }
+    } catch (error) {
+      this.logger.error('Error handling webhook update:', error);
     }
   }
 

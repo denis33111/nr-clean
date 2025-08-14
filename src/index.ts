@@ -44,10 +44,19 @@ async function main() {
       res.json({ status: 'healthy' });
     });
     
+
+    
     // Start the Express server
     app.listen(port, () => {
       console.log(`Express server listening on port ${port}`);
     });
+
+    // Keep-alive mechanism to prevent Render from sleeping
+    setInterval(() => {
+      fetch('https://telegram-bot-5kmf.onrender.com/health')
+        .then(() => console.log('Keep-alive ping sent'))
+        .catch(err => console.log('Keep-alive failed:', err));
+    }, 10 * 60 * 1000); // Every 10 minutes
 
     // Initialize logger
     const logger = new Logger();
@@ -66,6 +75,18 @@ async function main() {
     await bot.start();
     console.log('[DEBUG] Bot started successfully');
     logger.info('Bot started successfully');
+
+    // Update webhook endpoint to use bot handler
+    app.post('/webhook', express.json(), (req, res) => {
+      try {
+        // Process the update through the bot
+        bot.handleWebhookUpdate(req.body);
+        res.sendStatus(200);
+      } catch (error) {
+        console.error('Webhook error:', error);
+        res.sendStatus(500);
+      }
+    });
 
     // Initialize Google Sheets client
     const spreadsheetId = process.env.GOOGLE_SHEETS_ID || process.env.SHEET_ID || 'YOUR_SHEET_ID_HERE';
