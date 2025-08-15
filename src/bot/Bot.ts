@@ -285,6 +285,12 @@ export class Bot {
         query.data.startsWith('reschedule_')
       );
       
+      // Check if this is a course-related callback that should go to CandidateCourseFlow
+      const isCourseCallback = query.data && (
+        query.data.startsWith('course_') || 
+        query.data.startsWith('alt_')
+      );
+      
       // Route callback query to appropriate flow
       if (isInCandidateFlow && (this as any).candidateStep1Flow) {
         console.log(`[DEBUG] Routing callback query to CandidateStep1Flow`);
@@ -298,8 +304,8 @@ export class Bot {
         return;
       }
       
-      if (isInCourseFlow && (this as any).candidateCourseFlow) {
-        console.log(`[DEBUG] Routing callback query to CandidateCourseFlow`);
+      if ((isInCourseFlow || isCourseCallback) && (this as any).candidateCourseFlow) {
+        console.log(`[DEBUG] Routing callback query to CandidateCourseFlow (course flow: ${isInCourseFlow}, course callback: ${isCourseCallback})`);
         await (this as any).candidateCourseFlow.handleCallbackQuery(query);
         return;
       }
