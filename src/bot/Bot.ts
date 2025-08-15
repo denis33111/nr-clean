@@ -10,7 +10,7 @@ export class Bot {
   private bot: TelegramBot;
   private database: Database;
   private logger: Logger;
-  private sheetsClient?: GoogleSheetsClient;
+  private sheetsClient: GoogleSheetsClient | undefined;
   private commandHandler: CommandHandler;
   private messageHandler: MessageHandler;
   private callbackQueryHandler: CallbackQueryHandler;
