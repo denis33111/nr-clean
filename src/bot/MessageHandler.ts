@@ -665,8 +665,8 @@ Would you like to share your location?
     console.log(`[MessageHandler] User language: ${userLang}`);
     
     // Define office location (you can adjust these coordinates)
-    const officeLat = 37.922504; // New office coordinates
-    const officeLng = 23.932856;
+    const officeLat = 37.909170; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
+    const officeLng = 23.873056; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
     const maxDistance = 0.5; // 500 meters radius
     
     // Calculate distance between user and office
