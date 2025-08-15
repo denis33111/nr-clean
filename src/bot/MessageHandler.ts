@@ -31,7 +31,7 @@ export class MessageHandler {
   private adminService: AdminService;
   private sheets: GoogleSheetsClient;
 
-  constructor(bot: TelegramBot, database: Database, logger: Logger) {
+  constructor(bot: TelegramBot, database: Database, logger: Logger, sheets?: GoogleSheetsClient) {
     this.bot = bot;
     this.database = database;
     this.logger = logger;
