@@ -755,6 +755,11 @@ Would you like to share your location?
           await this.sheets.updateCell(`${sheetName}!A${nextRow}`, worker.name);
           rowNumber = nextRow;
           console.log(`[MessageHandler] Created new row ${rowNumber} for user "${worker.name}"`);
+          
+          // Clear cache for this month sheet to ensure fresh data for check-out
+          if (this.sheets.clearCacheForMonthSheet) {
+            this.sheets.clearCacheForMonthSheet(sheetName);
+          }
         } catch (error) {
           console.error('[MessageHandler] Error creating new row:', error);
           const errorMsg = userLang === 'gr'

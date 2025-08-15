@@ -211,4 +211,12 @@ export class GoogleSheetsClient {
     workersKeys.forEach(key => this.cache.delete(key));
     console.log(`[GoogleSheetsClient] Cleared cache for WORKERS sheet`);
   }
+
+  // Clear cache for month sheets
+  public clearCacheForMonthSheet(sheetName: string): void {
+    const cacheKeys = Array.from(this.cache.keys());
+    const monthKeys = cacheKeys.filter(key => key.includes(sheetName));
+    monthKeys.forEach(key => this.cache.delete(key));
+    console.log(`[GoogleSheetsClient] Cleared cache for month sheet: ${sheetName}`);
+  }
 } 
