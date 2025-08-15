@@ -38,10 +38,15 @@ export class MessageHandler {
     this.userService = new UserService(database);
     this.adminService = new AdminService(database);
     
-    // Initialize Google Sheets client
-    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
-    const keyFilePath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE || 'secrets/google-service-account.json';
-    this.sheets = new GoogleSheetsClient(spreadsheetId!, keyFilePath);
+    // Use the passed GoogleSheetsClient instance or create fallback
+    if (sheets) {
+      this.sheets = sheets;
+    } else {
+      // Fallback: create new instance only if none provided
+      const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+      const keyFilePath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE || 'secrets/google-service-account.json';
+      this.sheets = new GoogleSheetsClient(spreadsheetId!, keyFilePath);
+    }
     
     this.setupSessionCleanup();
   }

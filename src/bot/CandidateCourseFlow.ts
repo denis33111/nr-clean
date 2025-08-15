@@ -95,6 +95,16 @@ export class CandidateCourseFlow {
       try {
         await this.sheets.updateRow(range, current);
         console.log(`[CandidateCourseFlow] Successfully updated user ${userId} status to WORKING`);
+        
+        // Add candidate to WORKERS sheet
+        const candidateName = this.getName(header, current) || userId.toString();
+        try {
+          await this.sheets.addWorker(candidateName, userId, 'WORKING');
+          console.log(`[CandidateCourseFlow] Successfully added user ${userId} to WORKERS sheet`);
+        } catch (workerError) {
+          console.error(`[CandidateCourseFlow] Failed to add user ${userId} to WORKERS sheet:`, workerError);
+          // Continue even if adding to WORKERS sheet fails
+        }
       } catch (sheetsError) {
         console.error(`[CandidateCourseFlow] Failed to update Google Sheets for user ${userId}:`, sheetsError);
         // Send error message to user
