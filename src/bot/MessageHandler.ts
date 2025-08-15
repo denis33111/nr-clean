@@ -952,15 +952,8 @@ Would you like to share your location?
           ? `✅ Η αποχώρηση σας έχει καταγραφεί στις ${timeString}!\n\n👋 Καλή συνέχεια! 🚪`
           : `✅ Your check-out has been recorded at ${timeString}!\n\n👋 Take care! 🚪`;
         
-        // If messageId is provided, edit the original message
-        if (messageId) {
-          await this.bot.editMessageText(successMsg, {
-            chat_id: chatId,
-            message_id: messageId
-          });
-        } else {
-          await this.bot.sendMessage(chatId, successMsg);
-        }
+        // Always send a new message for check-out success (don't edit the location request)
+        await this.bot.sendMessage(chatId, successMsg);
         
       } catch (error) {
         console.error('[MessageHandler] Error writing check-out time:', error);
