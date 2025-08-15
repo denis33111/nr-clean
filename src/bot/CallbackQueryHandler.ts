@@ -394,6 +394,10 @@ Common issues and solutions:
 
     const action = params[0];
     const { MessageHandler } = await import('./MessageHandler');
+    if (!this.sheets) {
+      await this.bot.sendMessage(chatId, '❌ Error: Google Sheets connection not available. Please try again later.');
+      return;
+    }
     const messageHandler = new MessageHandler(this.bot, this.database, this.logger, this.sheets);
     const userLang = await messageHandler.getUserLanguage(userId);
 
