@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
+import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 import { CommandHandler } from './CommandHandler';
 import { MessageHandler } from './MessageHandler';
 import { CallbackQueryHandler } from './CallbackQueryHandler';
@@ -9,12 +10,13 @@ export class Bot {
   private bot: TelegramBot;
   private database: Database;
   private logger: Logger;
+  private sheetsClient?: GoogleSheetsClient;
   private commandHandler: CommandHandler;
   private messageHandler: MessageHandler;
   private callbackQueryHandler: CallbackQueryHandler;
   private lastUserCommands: Map<number, { command: string; timestamp: number }> = new Map(); // Track last command per user
 
-  constructor(database: Database, logger: Logger) {
+  constructor(database: Database, logger: Logger, sheetsClient?: GoogleSheetsClient) {
     const token = process.env.BOT_TOKEN;
     if (!token) {
       throw new Error('BOT_TOKEN environment variable is required');
@@ -22,6 +24,7 @@ export class Bot {
 
     this.database = database;
     this.logger = logger;
+    this.sheetsClient = sheetsClient;
     
     // Initialize bot with webhook for Render.com
     this.bot = new TelegramBot(token, { webHook: { port: 3000 } });
@@ -39,9 +42,9 @@ export class Bot {
     }) as any;
     
     // Initialize handlers
-    this.commandHandler = new CommandHandler(this.bot, this.database, this.logger);
-    this.messageHandler = new MessageHandler(this.bot, this.database, this.logger);
-    this.callbackQueryHandler = new CallbackQueryHandler(this.bot, this.database, this.logger);
+    this.commandHandler = new CommandHandler(this.bot, this.database, this.logger, this.sheetsClient);
+    this.messageHandler = new MessageHandler(this.bot, this.database, this.logger, this.sheetsClient);
+    this.callbackQueryHandler = new CallbackQueryHandler(this.bot, this.database, this.logger, this.sheetsClient);
     
     this.setupEventHandlers();
     this.setupMemoryCleanup();
