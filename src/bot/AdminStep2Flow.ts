@@ -409,7 +409,7 @@ export class AdminStep2Flow {
 
       const rescheduleRows = rows
         .map((r, idx) => ({ r, idx }))
-        .filter(({ r }) => r[colStep3] === 'reschedule');
+        .filter(({ r }) => r[colStep3] === 'reschedule' || r[colStep3] === 'RESCHEDULE');
 
       if (rescheduleRows.length === 0) {
         await this.bot.sendMessage(chatId, '✅ No candidates waiting for reschedule.');
@@ -540,7 +540,7 @@ export class AdminStep2Flow {
       // Reschedule reminder for new date
       if (this.reminderService && this.reminderService.scheduleReminderForCourse) {
         try {
-          await this.reminderService.scheduleReminderForCourse(candidateName, parseInt(candidateUserId, 10), dateStr);
+          await this.reminderService.scheduleReminderForCourse(dateStr, candidateName, parseInt(candidateUserId, 10));
           console.log(`[AdminStep2Flow] Rescheduled reminder for ${candidateName} on ${dateStr}`);
         } catch (reminderError) {
           console.error('[AdminStep2Flow] Error rescheduling reminder:', reminderError);
