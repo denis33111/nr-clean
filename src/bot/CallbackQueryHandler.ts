@@ -10,7 +10,7 @@ export class CallbackQueryHandler {
   private database: Database;
   private logger: Logger;
   private userService: UserService;
-  private sheets?: GoogleSheetsClient;
+  private sheets: GoogleSheetsClient | undefined;
 
   constructor(bot: TelegramBot, database: Database, logger: Logger, sheets?: GoogleSheetsClient) {
     this.bot = bot;
