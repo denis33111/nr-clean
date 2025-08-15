@@ -3,18 +3,21 @@ import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
 import { UserService } from '../services/UserService';
 import { AdminService } from '../services/AdminService';
+import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 
 export class CallbackQueryHandler {
   private bot: TelegramBot;
   private database: Database;
   private logger: Logger;
   private userService: UserService;
+  private sheets?: GoogleSheetsClient;
 
-  constructor(bot: TelegramBot, database: Database, logger: Logger) {
+  constructor(bot: TelegramBot, database: Database, logger: Logger, sheets?: GoogleSheetsClient) {
     this.bot = bot;
     this.database = database;
     this.logger = logger;
     this.userService = new UserService(database);
+    this.sheets = sheets;
   }
 
   async handleCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
@@ -391,7 +394,7 @@ Common issues and solutions:
 
     const action = params[0];
     const { MessageHandler } = await import('./MessageHandler');
-    const messageHandler = new MessageHandler(this.bot, this.database, this.logger);
+    const messageHandler = new MessageHandler(this.bot, this.database, this.logger, this.sheets);
     const userLang = await messageHandler.getUserLanguage(userId);
 
     switch (action) {
