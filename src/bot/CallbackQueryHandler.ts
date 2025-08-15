@@ -17,7 +17,7 @@ export class CallbackQueryHandler {
     this.database = database;
     this.logger = logger;
     this.userService = new UserService(database);
-    this.sheets = sheets;
+    this.sheets = sheets || undefined;
   }
 
   async handleCallbackQuery(query: TelegramBot.CallbackQuery): Promise<void> {
