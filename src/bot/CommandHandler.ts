@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
+import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 import { UserService } from '../services/UserService';
 import { AdminService } from '../services/AdminService';
 import { MessageHandler } from './MessageHandler';
@@ -9,17 +10,19 @@ export class CommandHandler {
   private bot: TelegramBot;
   private database: Database;
   private logger: Logger;
+  private sheets: GoogleSheetsClient | undefined;
   private userService: UserService;
   private adminService: AdminService;
   private messageHandler: any; // Assuming MessageHandler is imported and available
 
-  constructor(bot: TelegramBot, database: Database, logger: Logger) {
+  constructor(bot: TelegramBot, database: Database, logger: Logger, sheets?: GoogleSheetsClient) {
     this.bot = bot;
     this.database = database;
     this.logger = logger;
+    this.sheets = sheets;
     this.userService = new UserService(database);
     this.adminService = new AdminService(database);
-    this.messageHandler = new MessageHandler(bot, database, logger);
+    this.messageHandler = new MessageHandler(bot, database, logger, sheets);
   }
 
   async handleCommand(msg: TelegramBot.Message | undefined): Promise<void> {
