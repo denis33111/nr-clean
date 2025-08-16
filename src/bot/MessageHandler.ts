@@ -660,6 +660,9 @@ Would you like to share your location?
     checkInSessions.delete(userId);
     console.log(`[MessageHandler] Session cleared for user ${userId}`);
     
+    // Remove the location keyboard after location is received
+    await this.bot.sendMessage(chatId, '', { reply_markup: { remove_keyboard: true } });
+    
     // Get user's language
     const userLang = await this.getUserLanguage(userId);
     console.log(`[MessageHandler] User language: ${userLang}`);
