@@ -6,12 +6,22 @@ import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 export class ReminderService {
   private bot: TelegramBot;
   private sheets: GoogleSheetsClient;
+  private pendingReminders: Map<string, { courseDate: string; candidateName: string; userId: number; scheduledFor: Date }> = new Map();
 
   constructor(bot: TelegramBot, sheets: GoogleSheetsClient) {
     this.bot = bot;
     this.sheets = sheets;
     
     console.log('[ReminderService] Initializing scheduled reminders...');
+    
+    // Restore pending reminders from Google Sheets on startup
+    this.restorePendingReminders().catch(console.error);
+    
+    // Run reminder check every hour to send pending reminders
+    cron.schedule('0 * * * *', () => {
+      console.log('[ReminderService] Running hourly reminder check');
+      this.processPendingReminders().catch(console.error);
+    });
     
     // Run no-response check at 18:00 (6 PM) every day
     cron.schedule('0 18 * * *', () => {
@@ -29,7 +39,7 @@ export class ReminderService {
   }
 
   // Public method to schedule reminder for a specific course
-  public scheduleReminderForCourse(courseDate: string, candidateName: string, userId: number) {
+  public async scheduleReminderForCourse(courseDate: string, candidateName: string, userId: number) {
     console.log(`[ReminderService] scheduleReminderForCourse called for ${candidateName} (${userId}) on ${courseDate}`);
     
     // Parse the course date
@@ -46,19 +56,144 @@ export class ReminderService {
     console.log(`[ReminderService] Current time: ${now.toISOString()}`);
     console.log(`[ReminderService] Delay: ${delayMs}ms (${Math.round(delayMs / 1000 / 60)} minutes)`);
     
+    // Create a unique key for this reminder
+    const reminderKey = `${userId}_${courseDate}`;
+    
     // If reminder time has already passed, send immediately
     if (delayMs <= 0) {
       console.log(`[ReminderService] Reminder time has passed, sending immediately`);
+      // Send immediately but with a small delay to ensure proper logging
       setTimeout(() => {
         console.log(`[ReminderService] Sending immediate reminder to ${candidateName} (${userId}) for course on ${courseDate}`);
         this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
       }, 5000); // 5 seconds delay
     } else {
-      // Schedule for the correct time
-      setTimeout(() => {
-        console.log(`[ReminderService] Sending scheduled reminder to ${candidateName} (${userId}) for course on ${courseDate}`);
-        this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
-      }, delayMs);
+      // Store the reminder in memory for immediate access
+      this.pendingReminders.set(reminderKey, {
+        courseDate,
+        candidateName,
+        userId,
+        scheduledFor: reminderDate
+      });
+      
+      // Also save to Google Sheets for persistence across server restarts
+      try {
+        await this.saveReminderToSheets(courseDate, candidateName, userId, reminderDate);
+        console.log(`[ReminderService] Saved reminder to Google Sheets for ${candidateName} (${userId})`);
+      } catch (error) {
+        console.error(`[ReminderService] Failed to save reminder to Google Sheets for ${candidateName}:`, error);
+        // Continue with in-memory storage even if Google Sheets save fails
+      }
+      
+      console.log(`[ReminderService] Stored reminder for ${candidateName} (${userId}) scheduled for ${reminderDate.toISOString()}`);
+      console.log(`[ReminderService] Total pending reminders: ${this.pendingReminders.size}`);
+    }
+  }
+
+  // Process all pending reminders - called every hour by cron
+  private async processPendingReminders(): Promise<void> {
+    const now = new Date();
+    const remindersToSend: Array<{ courseDate: string; candidateName: string; userId: number; key: string }> = [];
+    
+    console.log(`[ReminderService] Processing pending reminders at ${now.toISOString()}`);
+    console.log(`[ReminderService] Total pending reminders: ${this.pendingReminders.size}`);
+    
+    // Log all pending reminders for debugging
+    if (this.pendingReminders.size > 0) {
+      console.log('[ReminderService] Current pending reminders:');
+      for (const [key, reminder] of this.pendingReminders) {
+        console.log(`  - ${key}: ${reminder.candidateName} (${reminder.userId}) for ${reminder.courseDate} at ${reminder.scheduledFor.toISOString()}`);
+      }
+    }
+    
+    // Check which reminders are due
+    for (const [key, reminder] of this.pendingReminders) {
+      if (reminder.scheduledFor <= now) {
+        remindersToSend.push({
+          courseDate: reminder.courseDate,
+          candidateName: reminder.candidateName,
+          userId: reminder.userId,
+          key
+        });
+        console.log(`[ReminderService] Reminder due: ${key} scheduled for ${reminder.scheduledFor.toISOString()}, current time: ${now.toISOString()}`);
+      } else {
+        console.log(`[ReminderService] Reminder not yet due: ${key} scheduled for ${reminder.scheduledFor.toISOString()}, current time: ${now.toISOString()}`);
+      }
+    }
+    
+    if (remindersToSend.length === 0) {
+      console.log('[ReminderService] No reminders due at this time');
+      return;
+    }
+    
+    console.log(`[ReminderService] Found ${remindersToSend.length} reminders to send`);
+    
+    // Send all due reminders
+    for (const reminder of remindersToSend) {
+      try {
+        console.log(`[ReminderService] Sending scheduled reminder to ${reminder.candidateName} (${reminder.userId}) for course on ${reminder.courseDate}`);
+        await this.sendReminderForSpecificCourse(reminder.courseDate, reminder.userId, reminder.candidateName);
+        
+        // Remove the sent reminder from pending list
+        this.pendingReminders.delete(reminder.key);
+        
+        // Also remove from Google Sheets
+        await this.removeReminderFromSheets(reminder.courseDate, reminder.userId);
+        
+        console.log(`[ReminderService] Reminder sent and removed from pending list for ${reminder.candidateName}`);
+      } catch (error) {
+        console.error(`[ReminderService] Failed to send reminder for ${reminder.candidateName}:`, error);
+        // Keep the reminder in the list to retry later
+      }
+    }
+    
+    console.log(`[ReminderService] Reminder processing completed. Remaining pending: ${this.pendingReminders.size}`);
+  }
+
+  // Remove a sent reminder from Google Sheets
+  private async removeReminderFromSheets(courseDate: string, userId: number): Promise<void> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) return;
+      
+      const rows = rowsRaw as string[][];
+      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
+      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      
+      if (colCourseDate === -1 || colUserId === -1) return;
+      
+      // Find the row with matching course date and user ID
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue; // Skip undefined rows
+        
+        const rowCourseDate = (row[colCourseDate] || '').trim();
+        const rowUserId = parseInt(row[colUserId] || '0', 10);
+        
+        if (rowCourseDate === courseDate && rowUserId === userId) {
+          // Clear the reminder data (set to empty string)
+          const updatedRow = [...row];
+          updatedRow[colCourseDate] = '';
+          updatedRow[colUserId] = '';
+          
+          // Find the SCHEDULEDFOR column and clear it too
+          const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
+          if (colScheduledFor !== -1) {
+            updatedRow[colScheduledFor] = '';
+          }
+          
+          // Update the row in Google Sheets
+          const rowNum = i + 3; // data starts at row 3
+          const range = `A${rowNum}:${String.fromCharCode(65 + header.length - 1)}${rowNum}`;
+          await this.sheets.updateRow(range, updatedRow);
+          
+          console.log(`[ReminderService] Removed reminder from Google Sheets for user ${userId}, course ${courseDate}`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error(`[ReminderService] Failed to remove reminder from Google Sheets:`, error);
     }
   }
 
@@ -569,5 +704,113 @@ export class ReminderService {
     } catch (error) {
       console.error(`[ReminderService] Error cleaning up chat for user ${userId}:`, error);
     }
+  }
+
+  // Restore pending reminders from Google Sheets
+  private async restorePendingReminders(): Promise<void> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) {
+        console.log('[ReminderService] No pending reminders found in Google Sheets.');
+        return;
+      }
+
+      const rows = rowsRaw as string[][];
+      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
+      const colCandidateName = header.findIndex(h => this.normalise(h) === 'NAME');
+      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
+
+      if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colScheduledFor === -1) {
+        console.log('[ReminderService] Required columns not found for restoring pending reminders.');
+        return;
+      }
+
+      for (const row of rows) {
+        const courseDate = (row[colCourseDate] || '').trim();
+        const candidateName = (row[colCandidateName] || '').trim();
+        const userIdStr = (row[colUserId] || '').trim();
+        const scheduledForStr = (row[colScheduledFor] || '').trim();
+
+        if (!courseDate || !candidateName || !userIdStr || !scheduledForStr) {
+          console.warn(`[ReminderService] Skipping incomplete reminder row: ${row}`);
+          continue;
+        }
+
+        const userId = parseInt(userIdStr, 10);
+        const scheduledFor = new Date(scheduledForStr);
+
+        if (isNaN(userId) || isNaN(scheduledFor.getTime())) {
+          console.warn(`[ReminderService] Skipping invalid reminder row: ${row}`);
+          continue;
+        }
+
+        const reminderKey = `${userId}_${courseDate}`;
+        this.pendingReminders.set(reminderKey, {
+          courseDate,
+          candidateName,
+          userId,
+          scheduledFor
+        });
+        console.log(`[ReminderService] Restored reminder: ${reminderKey} (scheduled for ${scheduledFor.toISOString()})`);
+      }
+      console.log(`[ReminderService] Restored ${this.pendingReminders.size} pending reminders from Google Sheets.`);
+    } catch (error) {
+      console.error('[ReminderService] Error restoring pending reminders from Google Sheets:', error);
+    }
+  }
+
+  // Save a single reminder to Google Sheets
+  private async saveReminderToSheets(courseDate: string, candidateName: string, userId: number, scheduledFor: Date): Promise<void> {
+    try {
+      const header = await this.sheets.getHeaderRow();
+      const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      if (!rowsRaw || !rowsRaw.length) {
+        console.log('[ReminderService] Google Sheets is empty, creating new sheet.');
+        // Add header if sheet is empty
+        const newHeader = ['COURSEDATE', 'NAME', 'USERID', 'SCHEDULEDFOR'];
+        await this.sheets.appendRow('A1', newHeader);
+        await this.sheets.appendRow('A2', ['', '', '', '']); // Empty row for header
+      }
+
+      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
+      const colCandidateName = header.findIndex(h => this.normalise(h) === 'NAME');
+      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
+
+      if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colScheduledFor === -1) {
+        console.log('[ReminderService] Required columns not found for saving reminders.');
+        return;
+      }
+
+      const newRow = [courseDate, candidateName, userId.toString(), scheduledFor.toISOString()];
+      await this.sheets.appendRow('A3', newRow); // Add new row starting from A3
+      console.log(`[ReminderService] Saved reminder to Google Sheets: ${courseDate}, ${candidateName}, ${userId}, ${scheduledFor.toISOString()}`);
+    } catch (error) {
+      console.error(`[ReminderService] Failed to save reminder to Google Sheets:`, error);
+    }
+  }
+
+  // Public method to manually trigger reminder check (for testing)
+  public async triggerReminderCheck(): Promise<void> {
+    console.log('[ReminderService] Manual reminder check triggered');
+    await this.processPendingReminders();
+  }
+
+  // Public method to get current pending reminders count (for monitoring)
+  public getPendingRemindersCount(): number {
+    return this.pendingReminders.size;
+  }
+
+  // Public method to get pending reminders details (for monitoring)
+  public getPendingRemindersDetails(): Array<{ key: string; courseDate: string; candidateName: string; userId: number; scheduledFor: Date }> {
+    return Array.from(this.pendingReminders.entries()).map(([key, reminder]) => ({
+      key,
+      courseDate: reminder.courseDate,
+      candidateName: reminder.candidateName,
+      userId: reminder.userId,
+      scheduledFor: reminder.scheduledFor
+    }));
   }
 } 

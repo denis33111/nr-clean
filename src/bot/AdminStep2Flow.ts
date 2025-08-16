@@ -351,7 +351,7 @@ export class AdminStep2Flow {
             console.log('[AdminStep2Flow] DEBUG: About to schedule reminder. reminderService:', !!this.reminderService, 'courseDate:', courseDate, 'uid:', uid, 'candidateName:', candidateName);
             if (this.reminderService && courseDate !== 'TBA') {
               console.log(`[AdminStep2Flow] Scheduling reminder for ${candidateName} (${uid}) for course on ${courseDate}`);
-              this.reminderService.scheduleReminderForCourse(courseDate, candidateName, uid);
+              await this.reminderService.scheduleReminderForCourse(courseDate, candidateName, uid);
             } else {
               console.log('[AdminStep2Flow] Reminder NOT scheduled:', {reminderService: !!this.reminderService, courseDate});
             }

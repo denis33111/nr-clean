@@ -35,13 +35,145 @@ async function main() {
       res.json({ 
         status: 'ok', 
         service: 'Telegram Candidate Bot',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        environment: process.env.NODE_ENV || 'development'
       });
     });
     
     // Health check endpoint
     app.get('/health', (req, res) => {
-      res.json({ status: 'healthy' });
+      res.json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    });
+
+    // Detailed status endpoint
+    app.get('/status', (req, res) => {
+      const status = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        environment: process.env.NODE_ENV || 'development',
+        reminderService: reminderService ? {
+          pendingReminders: reminderService.getPendingRemindersCount(),
+          details: reminderService.getPendingRemindersDetails()
+        } : 'Not initialized'
+      };
+      res.json(status);
+    });
+
+    // Manual reminder check endpoint (for testing)
+    app.post('/test-reminders', async (req, res) => {
+      try {
+        if (reminderService) {
+          await reminderService.triggerReminderCheck();
+          res.json({ 
+            status: 'success', 
+            message: 'Reminder check triggered',
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          res.status(500).json({ 
+            status: 'error', 
+            message: 'Reminder service not initialized' 
+          });
+        }
+      } catch (error) {
+        res.status(500).json({ 
+          status: 'error', 
+          message: 'Failed to trigger reminder check',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+    
+    // Simple web dashboard
+    app.get('/dashboard', (req, res) => {
+      const uptime = process.uptime();
+      const memUsage = process.memoryUsage();
+      const uptimeHours = Math.floor(uptime / 3600);
+      const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+      const uptimeSeconds = Math.floor(uptime % 60);
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Telegram Bot Dashboard</title>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+            .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .header { text-align: center; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 20px; margin-bottom: 20px; }
+            .status { padding: 15px; margin: 10px 0; border-radius: 5px; }
+            .status.ok { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+            .status.info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+            .metric { display: flex; justify-content: space-between; margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+            .metric-label { font-weight: bold; }
+            .metric-value { font-family: monospace; }
+            .refresh-btn { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 20px 0; }
+            .refresh-btn:hover { background: #0056b3; }
+            .timestamp { text-align: center; color: #666; font-size: 0.9em; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🤖 Telegram Bot Dashboard</h1>
+              <p>Real-time server status and monitoring</p>
+            </div>
+            
+            <div class="status ok">
+              <h3>✅ Server Status: ONLINE</h3>
+              <p>Your bot is running and responding to requests</p>
+            </div>
+            
+            <div class="metric">
+              <span class="metric-label">Uptime:</span>
+              <span class="metric-value">${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s</span>
+            </div>
+            
+            <div class="metric">
+              <span class="metric-label">Memory Used:</span>
+              <span class="metric-value">${Math.round(memUsage.heapUsed / 1024 / 1024)} MB</span>
+            </div>
+            
+            <div class="metric">
+              <span class="metric-label">Memory Total:</span>
+              <span class="metric-value">${Math.round(memUsage.heapTotal / 1024 / 1024)} MB</span>
+            </div>
+            
+            <div class="metric">
+              <span class="metric-label">Environment:</span>
+              <span class="metric-value">${process.env.NODE_ENV || 'development'}</span>
+            </div>
+            
+            <div class="status info">
+              <h3>📊 Health Check Endpoints</h3>
+              <ul>
+                <li><strong>/health</strong> - Basic health status</li>
+                <li><strong>/status</strong> - Detailed server status</li>
+                <li><strong>/test-reminders</strong> - Test reminder system (POST)</li>
+              </ul>
+            </div>
+            
+            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh Dashboard</button>
+            
+            <div class="timestamp">
+              Last updated: ${new Date().toLocaleString()}
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      res.send(html);
     });
     
 
@@ -52,11 +184,29 @@ async function main() {
     });
 
     // Keep-alive mechanism to prevent Render from sleeping
-    setInterval(() => {
+    let keepAliveCount = 0;
+    const keepAliveInterval = setInterval(() => {
+      keepAliveCount++;
+      const timestamp = new Date().toISOString();
+      
       fetch('https://telegram-bot-5kmf.onrender.com/health')
-        .then(() => console.log('Keep-alive ping sent'))
-        .catch(err => console.log('Keep-alive failed:', err));
+        .then(async (response) => {
+          const responseTime = Date.now();
+          const responseData = await response.json() as { status: string; uptime: number };
+          console.log(`[${timestamp}] Keep-alive #${keepAliveCount} - Status: ${response.status}, Response: ${responseTime}ms, Uptime: ${Math.round(responseData.uptime / 60)} minutes`);
+        })
+        .catch(err => {
+          console.error(`[${timestamp}] Keep-alive #${keepAliveCount} failed:`, err.message);
+        });
     }, 10 * 60 * 1000); // Every 10 minutes
+
+    // Log server startup
+    console.log(`[${new Date().toISOString()}] Server started with keep-alive every 10 minutes`);
+    console.log(`[${new Date().toISOString()}] Health check endpoints available:`);
+    console.log(`  - GET / - Basic status`);
+    console.log(`  - GET /health - Health check`);
+    console.log(`  - GET /status - Detailed status with reminders`);
+    console.log(`  - POST /test-reminders - Manual reminder test`);
 
     // Initialize logger
     const logger = new Logger();
@@ -138,21 +288,56 @@ async function main() {
 
     console.log('[DEBUG] All services initialized successfully!');
 
+    // Process monitoring
+    const monitorInterval = setInterval(() => {
+      const memUsage = process.memoryUsage();
+      const uptime = process.uptime();
+      const timestamp = new Date().toISOString();
+      
+      // Log memory usage every 30 minutes
+      console.log(`[${timestamp}] Process Monitor - Uptime: ${Math.round(uptime / 60)} minutes, Memory: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB used, ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB total`);
+      
+      // Alert if memory usage is high (>500MB)
+      if (memUsage.heapUsed > 500 * 1024 * 1024) {
+        console.warn(`[${timestamp}] WARNING: High memory usage detected: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
+      }
+      
+      // Alert if uptime is very long (potential memory leaks)
+      if (uptime > 24 * 60 * 60) { // More than 24 hours
+        console.log(`[${timestamp}] INFO: Server running for ${Math.round(uptime / 60 / 60)} hours`);
+      }
+    }, 30 * 60 * 1000); // Every 30 minutes
+
+    // Graceful shutdown handling
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`\n[${new Date().toISOString()}] Received ${signal}, shutting down gracefully...`);
+      
+      // Clear intervals
+      clearInterval(keepAliveInterval);
+      clearInterval(monitorInterval);
+      
+      // Close database connections if needed
+      try {
+        await database.close?.();
+        console.log('[Shutdown] Database connections closed');
+      } catch (error) {
+        console.error('[Shutdown] Error closing database:', error);
+      }
+      
+      console.log(`[${new Date().toISOString()}] Graceful shutdown completed`);
+      process.exit(0);
+    };
+
+    // Handle graceful shutdown
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
   } catch (error) {
     console.error('Failed to start bot:', error);
     process.exit(1);
   }
 }
 
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\nShutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('\nShutting down gracefully...');
-  process.exit(0);
-});
+// Graceful shutdown is now handled in the main function
 
 main(); 
