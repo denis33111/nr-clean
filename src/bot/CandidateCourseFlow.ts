@@ -492,16 +492,27 @@ export class CandidateCourseFlow {
     
     console.log(`[CandidateCourseFlow] Processing message from user ${userId}: "${msg.text}"`);
     
-    // Handle reschedule reason
-    if (session.awaitingReason) {
-      await this.saveRescheduleReason(userId, msg.text.trim(), msg.chat.id, session.row);
-      // Keep session for a bit so other handlers skip duplicate replies
-      setTimeout(() => this.sessions.delete(userId), 10000);
-      return;
+    try {
+      // Handle reschedule reason
+      if (session.awaitingReason) {
+        console.log(`[CandidateCourseFlow] User ${userId} providing reschedule reason: "${msg.text}"`);
+        await this.saveRescheduleReason(userId, msg.text.trim(), msg.chat.id, session.row);
+        // Keep session for a bit so other handlers skip duplicate replies
+        setTimeout(() => this.sessions.delete(userId), 10000);
+        return;
+      }
+      
+      // Handle other course flow messages here if needed
+      console.log(`[CandidateCourseFlow] User ${userId} sent message but no handler for: "${msg.text}"`);
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Error handling message from user ${userId}:`, error);
+      // Try to send error message to user
+      try {
+        await this.bot.sendMessage(msg.chat.id, '❌ Sorry, something went wrong. Please try again later.');
+      } catch (sendError) {
+        console.error(`[CandidateCourseFlow] Failed to send error message to user ${userId}:`, sendError);
+      }
     }
-    
-    // Handle other course flow messages here if needed
-    console.log(`[CandidateCourseFlow] User ${userId} sent message but no handler for: "${msg.text}"`);
   }
 
   // Public method to handle callback queries from webhook system
@@ -513,18 +524,36 @@ export class CandidateCourseFlow {
     const userId = query.from.id;
     console.log(`[CandidateCourseFlow] Processing callback query: ${query.data} from user ${userId}`);
 
-    if (query.data === 'course_yes') {
-      await this.handleYes(userId, query.id, query.message!.chat.id);
-    } else if (query.data === 'course_no') {
-      await this.startDecline(userId, query.id, query.message!.chat.id);
-    } else if (query.data === 'course_decline') {
-      await this.finalDecline(userId, query.id, query.message!.chat.id, 'NOT_INTERESTED');
-    } else if (query.data === 'course_reschedule') {
-      await this.startReschedule(userId, query.id, query.message!.chat.id);
-    } else if (query.data === 'alt_yes') {
-      await this.handleAltYes(userId, query.id, query.message!.chat.id);
-    } else if (query.data === 'alt_no') {
-      await this.handleAltNo(userId, query.id, query.message!.chat.id);
+    try {
+      if (query.data === 'course_yes') {
+        console.log(`[CandidateCourseFlow] User ${userId} confirmed course attendance`);
+        await this.handleYes(userId, query.id, query.message!.chat.id);
+      } else if (query.data === 'course_no') {
+        console.log(`[CandidateCourseFlow] User ${userId} declined course attendance`);
+        await this.startDecline(userId, query.id, query.message!.chat.id);
+      } else if (query.data === 'course_decline') {
+        console.log(`[CandidateCourseFlow] User ${userId} confirmed not interested`);
+        await this.finalDecline(userId, query.id, query.message!.chat.id, 'NOT_INTERESTED');
+      } else if (query.data === 'course_reschedule') {
+        console.log(`[CandidateCourseFlow] User ${userId} requested reschedule`);
+        await this.startReschedule(userId, query.id, query.message!.chat.id);
+      } else if (query.data === 'alt_yes') {
+        console.log(`[CandidateCourseFlow] User ${userId} interested in alternative position`);
+        await this.handleAltYes(userId, query.id, query.message!.chat.id);
+      } else if (query.data === 'alt_no') {
+        console.log(`[CandidateCourseFlow] User ${userId} not interested in alternative`);
+        await this.handleAltNo(userId, query.id, query.message!.chat.id);
+      } else {
+        console.log(`[CandidateCourseFlow] Unknown callback data: ${query.data} from user ${userId}`);
+      }
+    } catch (error) {
+      console.error(`[CandidateCourseFlow] Error handling callback query ${query.data} for user ${userId}:`, error);
+      // Try to send error message to user
+      try {
+        await this.bot.sendMessage(query.message!.chat.id, '❌ Sorry, something went wrong. Please try again later.');
+      } catch (sendError) {
+        console.error(`[CandidateCourseFlow] Failed to send error message to user ${userId}:`, sendError);
+      }
     }
   }
 } 

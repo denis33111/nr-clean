@@ -334,7 +334,7 @@ export class AdminStep2Flow {
           const uid = parseInt(current[uidIdx] as string, 10);
           if (!isNaN(uid)) {
             const position = sess.position || '';
-            const courseDate = sess.answers['COURSEDATE'] || 'TBA';
+            const courseDate = sess.answers['COURSE_DATE'] || 'TBA';
             
             // Get language preference
             const langIdx = header.findIndex(h => normalise(h) === 'LANG' || normalise(h) === 'LANGUAGE');
@@ -357,7 +357,7 @@ export class AdminStep2Flow {
             }
           }
         }
-        await this.bot.sendMessage(chatId, `✅ Ο/Η ${candidateName} εγκρίθηκε για τη θέση ${sess.position}. Εκπαίδευση: ${sess.answers['COURSEDATE'] || 'TBA'} (STATUS → WAITING)`);
+        await this.bot.sendMessage(chatId, `✅ Ο/Η ${candidateName} εγκρίθηκε για τη θέση ${sess.position}. Εκπαίδευση: ${sess.answers['COURSE_DATE'] || 'TBA'} (STATUS → WAITING)`);
       } else {
         await this.bot.sendMessage(chatId, `❌ Ο/Η ${candidateName} δεν εγκρίθηκε. STATUS → STOP.`);
 

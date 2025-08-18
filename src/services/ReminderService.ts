@@ -23,6 +23,14 @@ export class ReminderService {
       this.processPendingReminders().catch(console.error);
     });
     
+    // NEW: Daily 10:00 AM Greece time check of main sheet for course reminders
+    cron.schedule('0 7 * * *', () => {
+      console.log('[ReminderService] Running daily 10:00 AM Greece time course reminder check');
+      this.checkMainSheetForCourseReminders().catch(console.error);
+    }, {
+      timezone: 'Europe/Athens'
+    });
+    
     // Run no-response check at 18:00 (6 PM) every day
     cron.schedule('0 18 * * *', () => {
       console.log('[ReminderService] Running no-response check at 6:00 PM');
@@ -42,11 +50,48 @@ export class ReminderService {
   public async scheduleReminderForCourse(courseDate: string, candidateName: string, userId: number) {
     console.log(`[ReminderService] scheduleReminderForCourse called for ${candidateName} (${userId}) on ${courseDate}`);
     
+    // BULLETPROOF date parsing - handle various formats safely
+    let parsedCourseDate: Date | null = null;
+    try {
+      // Try multiple date formats
+      const dateFormats = [
+        courseDate, // YYYY-M-D
+        courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-$3'), // Ensure proper format
+        courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-$3'), // Add leading zeros to month
+        courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-0$3'), // Add leading zeros to day
+        courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-0$3') // Add leading zeros to both
+      ];
+      
+      for (const format of dateFormats) {
+        const testDate = new Date(format + 'T00:00:00');
+        if (!isNaN(testDate.getTime())) {
+          parsedCourseDate = testDate;
+          break;
+        }
+      }
+    } catch (error) {
+      console.error(`[ReminderService] Failed to parse course date "${courseDate}" for ${candidateName}:`, error);
+      // Don't crash - just log and return
+      return;
+    }
+    
+    if (!parsedCourseDate) {
+      console.error(`[ReminderService] Invalid course date "${courseDate}" for ${candidateName} - cannot schedule reminder`);
+      return;
+    }
+    
     // Parse the course date
-    const courseDateTime = new Date(courseDate + 'T00:00:00');
+    const courseDateTime = parsedCourseDate;
     const reminderDate = new Date(courseDateTime);
     reminderDate.setDate(reminderDate.getDate() - 1); // 1 day before
-    reminderDate.setHours(10, 0, 0, 0); // 10:00 AM
+    
+    // Set reminder time to 10:00 AM Greece time (GMT+3)
+    // The server might be running in UTC, so we need to account for timezone
+    reminderDate.setHours(10, 0, 0, 0); // 10:00 AM local time
+    
+    console.log(`[ReminderService] Course date: ${courseDate}`);
+    console.log(`[ReminderService] Reminder date (local): ${reminderDate.toLocaleString('en-US', { timeZone: 'Europe/Athens' })}`);
+    console.log(`[ReminderService] Reminder date (UTC): ${reminderDate.toISOString()}`);
     
     const now = new Date();
     const delayMs = reminderDate.getTime() - now.getTime();
@@ -63,9 +108,9 @@ export class ReminderService {
     if (delayMs <= 0) {
       console.log(`[ReminderService] Reminder time has passed, sending immediately`);
       // Send immediately but with a small delay to ensure proper logging
-      setTimeout(() => {
+    setTimeout(() => {
         console.log(`[ReminderService] Sending immediate reminder to ${candidateName} (${userId}) for course on ${courseDate}`);
-        this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
+      this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
       }, 5000); // 5 seconds delay
     } else {
       // Store the reminder in memory for immediate access
@@ -484,12 +529,12 @@ export class ReminderService {
 
   private async notifyAdmins(message: string): Promise<void> {
     try {
-      const adminGroupId = process.env.ADMIN_GROUP_ID;
-      if (!adminGroupId) {
+    const adminGroupId = process.env.ADMIN_GROUP_ID;
+    if (!adminGroupId) {
         console.log('[ReminderService] ADMIN_GROUP_ID not set, skipping admin notification');
-        return;
-      }
-
+      return;
+    }
+    
       await this.bot.sendMessage(adminGroupId, message);
       console.log('[ReminderService] Admin notification sent successfully');
     } catch (error) {
@@ -812,5 +857,123 @@ export class ReminderService {
       userId: reminder.userId,
       scheduledFor: reminder.scheduledFor
     }));
+  }
+
+  // NEW: Daily 10:00 AM Greece time check of main sheet for course reminders
+  private async checkMainSheetForCourseReminders(): Promise<void> {
+    try {
+      console.log('[ReminderService] Starting daily 10:00 AM course reminder check...');
+      
+      // Get today's date in Greece timezone
+      const now = new Date();
+      const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
+      const today = greeceTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      console.log(`[ReminderService] Checking for candidates with course date: ${today}`);
+      
+      // Read main sheet to find candidates with course date = today
+      const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
+      const rowsRaw = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
+      
+      if (!rowsRaw || !rowsRaw.length) {
+        console.log('[ReminderService] No data found in main sheet');
+        return;
+      }
+      
+      const rows = rowsRaw as string[][];
+      
+      // Find column indices
+      const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
+      const colName = header.findIndex(h => h === 'NAME');
+      const colUserId = header.findIndex(h => h === 'user id');
+      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
+      const colStatus = header.findIndex(h => h === 'STATUS');
+      
+      if (colCourseDate === -1 || colName === -1 || colUserId === -1) {
+        console.log('[ReminderService] Required columns not found in main sheet');
+        return;
+      }
+      
+      let remindersSent = 0;
+      
+      // Check each row for candidates with course date = today
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || !row[colCourseDate] || !row[colName]) continue;
+        
+        const courseDate = row[colCourseDate].trim();
+        const candidateName = row[colName].trim();
+        const userIdStr = row[colUserId]?.trim();
+        const reminderSent = row[colReminderSent]?.trim();
+        const status = row[colStatus]?.trim();
+        
+        // Skip if no course date or already sent reminder
+        if (!courseDate || reminderSent === 'YES') continue;
+        
+        // Skip if status is not WAITING (candidate already confirmed or rejected)
+        if (status && status !== 'WAITING') continue;
+        
+        // Parse course date safely
+        let parsedCourseDate: Date | null = null;
+        try {
+          // Try multiple date formats
+          const dateFormats = [
+            courseDate, // YYYY-M-D
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-$3'), // Ensure proper format
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-$3'), // Add leading zeros
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-0$3')  // Add leading zeros
+          ];
+          
+          for (const format of dateFormats) {
+            const testDate = new Date(format + 'T00:00:00');
+            if (!isNaN(testDate.getTime())) {
+              parsedCourseDate = testDate;
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`[ReminderService] Failed to parse course date "${courseDate}" for ${candidateName}:`, error);
+          continue;
+        }
+        
+        if (!parsedCourseDate) {
+          console.warn(`[ReminderService] Invalid course date "${courseDate}" for ${candidateName}`);
+          continue;
+        }
+        
+        // Check if course date is today
+        const courseDateStr = parsedCourseDate.toISOString().split('T')[0];
+        if (courseDateStr === today) {
+          console.log(`[ReminderService] Found candidate ${candidateName} with course today: ${courseDate}`);
+          
+          // Send reminder if user ID exists
+          if (userIdStr && !isNaN(parseInt(userIdStr))) {
+            const userId = parseInt(userIdStr);
+            
+            try {
+              await this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
+              
+              // Update REMINDERSENT column to YES
+              const rowNum = i + 3; // data starts at row 3
+              if (colReminderSent !== -1) {
+                await this.sheets.updateCell(`'Φύλλο1'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
+                console.log(`[ReminderService] Updated REMINDERSENT to YES for ${candidateName}`);
+              }
+              
+              remindersSent++;
+            } catch (error) {
+              console.error(`[ReminderService] Failed to send reminder to ${candidateName}:`, error);
+            }
+          } else {
+            console.log(`[ReminderService] No valid user ID for ${candidateName}, skipping reminder`);
+          }
+        }
+      }
+      
+      console.log(`[ReminderService] Daily reminder check completed. Sent ${remindersSent} reminders.`);
+      
+    } catch (error) {
+      console.error('[ReminderService] Error during daily course reminder check:', error);
+    }
   }
 } 

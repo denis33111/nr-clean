@@ -78,11 +78,6 @@ export class MessageHandler {
       if (cleanedCount > 0) {
         console.log(`[MessageHandler] Memory cleanup: Removed ${cleanedCount} expired sessions`);
       }
-      
-      // Log session counts for monitoring
-      if (checkInSessions.size > 0 || contactSessions.size > 0) {
-        console.log(`[MessageHandler] Active sessions - Check-in: ${checkInSessions.size}, Contact: ${contactSessions.size}`);
-      }
     }, 5 * 60 * 1000); // Every 5 minutes
   }
 
@@ -123,16 +118,11 @@ export class MessageHandler {
 
   // Helper method to check if user has "working" status
   public async getUserStatus(userId: number): Promise<{ status: string; name: string } | null> {
-    const startTime = Date.now();
-    console.log(`[MessageHandler] getUserStatus called for user ${userId} at ${new Date().toISOString()}`);
-    
     try {
       // Use WORKERS sheet as the main source of truth
       const worker = await this.sheets.getWorkerById(userId);
       
       if (worker) {
-        console.log(`[MessageHandler] Found worker: ${worker.name}, status: ${worker.status} at ${new Date().toISOString()}`);
-        console.log(`[MessageHandler] getUserStatus completed in ${Date.now() - startTime}ms`);
         return {
           status: worker.status,
           name: worker.name
@@ -140,19 +130,12 @@ export class MessageHandler {
       }
       
       // Fallback to old method if not found in WORKERS sheet
-      console.log(`[MessageHandler] Worker not found in WORKERS sheet, checking main sheet...`);
-      
       const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
-      console.log(`[MessageHandler] Header row retrieved at ${new Date().toISOString()}`);
-      
       const rows = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
-      console.log(`[MessageHandler] Rows retrieved at ${new Date().toISOString()}`);
       
       const statusColumnIndex = header.findIndex(h => h === 'STATUS');
-      console.log(`[MessageHandler] Status column index: ${statusColumnIndex} at ${new Date().toISOString()}`);
       
       if (statusColumnIndex === -1) {
-        console.log(`[MessageHandler] Status column not found`);
         return null;
       }
       
@@ -160,13 +143,10 @@ export class MessageHandler {
         if (row.length > statusColumnIndex && row[1] === userId.toString()) {
           const status = row[statusColumnIndex] || '';
           const name = row[3] || ''; // NAME column
-          console.log(`[MessageHandler] Found user status: ${status}, name: ${name} at ${new Date().toISOString()}`);
-          console.log(`[MessageHandler] getUserStatus completed in ${Date.now() - startTime}ms`);
           return { status, name };
         }
       }
       
-      console.log(`[MessageHandler] User not found in any sheet`);
       return null;
       
     } catch (error) {
@@ -196,36 +176,29 @@ export class MessageHandler {
     try {
       const rowsRaw = await this.sheets.getRows(`${sheetName}!A2:Z1000`);
       if (!rowsRaw || !rowsRaw.length) {
-        console.log(`[MessageHandler] No rows found in sheet ${sheetName}`);
         return null;
       }
       
       const rows = rowsRaw as string[][];
-      console.log(`[MessageHandler] Searching for user "${userName}" in sheet ${sheetName}`);
-      console.log(`[MessageHandler] Found ${rows.length} rows in sheet`);
       
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!row || !row[0]) continue; // Skip empty rows
         
         const rowName = row[0].trim(); // Column A contains names
-        console.log(`[MessageHandler] Row ${i + 2}: "${rowName}" vs "${userName}"`);
         
         // Try exact match first
         if (rowName.toLowerCase() === userName.toLowerCase()) {
-          console.log(`[MessageHandler] Found exact match at row ${i + 2}`);
           return i + 2; // Return 1-indexed row number (add 2 because we start from A2)
         }
         
         // Try partial match (in case of extra spaces or slight differences)
         if (rowName.toLowerCase().includes(userName.toLowerCase()) || 
             userName.toLowerCase().includes(rowName.toLowerCase())) {
-          console.log(`[MessageHandler] Found partial match at row ${i + 2}`);
           return i + 2;
         }
       }
       
-      console.log(`[MessageHandler] User "${userName}" not found in sheet ${sheetName}`);
       return null;
     } catch (error) {
       console.error('[MessageHandler] Error finding user row in month sheet:', error);
@@ -256,9 +229,7 @@ export class MessageHandler {
       return;
     }
 
-    console.log(`[MessageHandler] Received message from user ${userId}: ${text}`);
-    console.log(`[MessageHandler] Message has location: ${!!msg.location}`);
-    console.log(`[MessageHandler] Location data:`, msg.location);
+
 
     // Skip if this is a group chat and user is not admin
     if (msg.chat.type !== 'private') {
@@ -271,16 +242,13 @@ export class MessageHandler {
     // Check if user is in contact mode
     const contactSession = contactSessions.get(userId);
     if (contactSession?.awaitingMessage) {
-      console.log(`[MessageHandler] User ${userId} is in contact mode`);
       await this.handleContactMessage(msg);
       return;
     }
 
     // Check if user is awaiting location validation
     const checkInSession = checkInSessions.get(userId);
-    console.log(`[MessageHandler] Check-in session for user ${userId}:`, checkInSession);
     if (checkInSession?.awaitingLocation && msg.location) {
-      console.log(`[MessageHandler] Processing location validation for user ${userId}`);
       await this.handleLocationValidation(msg);
       return;
     }
@@ -318,169 +286,46 @@ export class MessageHandler {
     // Convert to lowercase for easier matching
     const lowerText = text.toLowerCase();
 
-    // Check for greetings
-    if (this.isGreeting(lowerText)) {
-      await this.handleGreeting(chatId, user);
-      return;
-    }
-
-    // Check for questions
-    if (this.isQuestion(lowerText)) {
-      await this.handleQuestion(chatId, text);
-      return;
-    }
-
-    // Check for specific keywords
+    // Check for help requests
     if (lowerText.includes('help') || lowerText.includes('support')) {
       await this.handleHelpRequest(chatId);
       return;
     }
 
-    if (lowerText.includes('time') || lowerText.includes('date')) {
-      await this.handleTimeRequest(chatId);
-      return;
-    }
-
-    if (lowerText.includes('weather')) {
-      await this.handleWeatherRequest(chatId);
-      return;
-    }
-
-    if (lowerText.includes('joke') || lowerText.includes('funny')) {
-      await this.handleJokeRequest(chatId);
-      return;
-    }
-
-    // Default response
+    // Default response for unknown messages
     await this.handleDefaultMessage(chatId, text, user);
   }
 
-  private isGreeting(text: string): boolean {
-    const greetings = [
-      'hello', 'hi', 'hey', 'good morning', 'good afternoon', 
-      'good evening', 'greetings', 'salutations', 'yo', 'sup'
-    ];
-    return greetings.some(greeting => text.includes(greeting));
-  }
 
-  private isQuestion(text: string): boolean {
-    return text.includes('?') || 
-           text.startsWith('what') || 
-           text.startsWith('how') || 
-           text.startsWith('why') || 
-           text.startsWith('when') || 
-           text.startsWith('where') || 
-           text.startsWith('who') || 
-           text.startsWith('which');
-  }
-
-  private async handleGreeting(chatId: number, user: any): Promise<void> {
-    const greetings = [
-      `Hello ${user.firstName}! 👋 How can I help you today?`,
-      `Hi there ${user.firstName}! 😊 What would you like to do?`,
-      `Hey ${user.firstName}! 🎉 Nice to see you!`,
-      `Greetings ${user.firstName}! ✨ How's your day going?`
-    ];
-
-    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)] || 'Hello!';
-    await this.bot.sendMessage(chatId, randomGreeting);
-  }
-
-  private async handleQuestion(chatId: number, text: string): Promise<void> {
-    const responses = [
-      "That's an interesting question! 🤔 I'm still learning, but I'll do my best to help.",
-      "Great question! 💭 Let me think about that...",
-      "I'm not sure I understand completely. Could you rephrase that? 🤷‍♂️",
-      "That's a good point! 💡 What specifically would you like to know?",
-      "I'm here to help! 🎯 Could you provide more details?"
-    ];
-
-    const randomResponse = responses[Math.floor(Math.random() * responses.length)] || 'Thank you!';
-    await this.bot.sendMessage(chatId, randomResponse);
-  }
 
   private async handleHelpRequest(chatId: number): Promise<void> {
     const helpMessage = `
 🤝 Need Help?
 
-I'm here to assist you! Here are some things I can help with:
+I'm your hiring assistant for Newrest. Here's what I can help with:
 
 📋 Commands:
-• /start - Start the bot
-• /help - Show help information  
-• /settings - Manage your settings
-• /stats - View your statistics
+• /start - Begin your job application
+• /help - Show this help information
 
 💬 Features:
-• Answer questions
-• Provide information
-• Chat and interact
-• Track your usage
+• Job application process
+• Course scheduling
+• Check-in/check-out for workers
+• Contact support team
 
 💡 Tips:
-• Use commands for specific actions
-• Send regular messages to chat
-• Ask questions naturally
-• Use /help anytime for assistance
+• Use /start to begin your application
+• Follow the step-by-step process
+• Contact support if you need help
 
-Is there something specific you'd like help with?
+Is there something specific about the hiring process you need help with?
     `.trim();
 
     await this.bot.sendMessage(chatId, helpMessage);
   }
 
-  private async handleTimeRequest(chatId: number): Promise<void> {
-    const now = new Date();
-    const timeMessage = `
-🕐 Current Time Information
 
-📅 Date: ${now.toLocaleDateString()}
-⏰ Time: ${now.toLocaleTimeString()}
-🌍 Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-📅 Day: ${now.toLocaleDateString('en-US', { weekday: 'long' })}
-📆 Month: ${now.toLocaleDateString('en-US', { month: 'long' })}
-    `.trim();
-
-    await this.bot.sendMessage(chatId, timeMessage);
-  }
-
-  private async handleWeatherRequest(chatId: number): Promise<void> {
-    const weatherMessage = `
-🌤️ Weather Information
-
-I'd love to help you with weather information! However, I need to know your location to provide accurate weather data.
-
-📍 To get weather info, please:
-1. Share your location, or
-2. Tell me your city name
-
-You can also try:
-• "Weather in [city name]"
-• "What's the weather like in [location]"
-
-Would you like to share your location?
-    `.trim();
-
-    await this.bot.sendMessage(chatId, weatherMessage);
-  }
-
-  private async handleJokeRequest(chatId: number): Promise<void> {
-    const jokes = [
-      "Why don't scientists trust atoms? Because they make up everything! 😄",
-      "Why did the scarecrow win an award? Because he was outstanding in his field! 🌾",
-      "Why don't eggs tell jokes? They'd crack each other up! 🥚",
-      "Why did the math book look so sad? Because it had too many problems! 📚",
-      "What do you call a fake noodle? An impasta! 🍝",
-      "Why did the bicycle fall over? Because it was two-tired! 🚲",
-      "What do you call a bear with no teeth? A gummy bear! 🐻",
-      "Why don't skeletons fight each other? They don't have the guts! 💀",
-      "What do you call a fish wearing a bowtie? So-fish-ticated! 🐟",
-      "Why did the cookie go to the doctor? Because it was feeling crumbly! 🍪"
-    ];
-
-    const randomJoke = jokes[Math.floor(Math.random() * jokes.length)] || 'No joke available.';
-    await this.bot.sendMessage(chatId, randomJoke);
-  }
 
   private async handleDefaultMessage(chatId: number, text: string, user: any): Promise<void> {
     const responses = [
@@ -642,30 +487,23 @@ Would you like to share your location?
 
   // Handle location validation for check-in/check-out
   private async handleLocationValidation(msg: TelegramBot.Message): Promise<void> {
-    console.log(`[MessageHandler] handleLocationValidation called`);
     const userId = msg.from!.id;
     const chatId = msg.chat.id;
     const location = msg.location!;
     
-    console.log(`[MessageHandler] User ${userId} location: ${location.latitude}, ${location.longitude}`);
-    
     const session = checkInSessions.get(userId);
-    console.log(`[MessageHandler] Session found:`, session);
     if (!session) {
-      console.log(`[MessageHandler] No session found for user ${userId}`);
       return;
     }
     
     // Clear session
     checkInSessions.delete(userId);
-    console.log(`[MessageHandler] Session cleared for user ${userId}`);
     
     // Remove the location keyboard after location is received
     await this.bot.sendMessage(chatId, '', { reply_markup: { remove_keyboard: true } });
     
     // Get user's language
     const userLang = await this.getUserLanguage(userId);
-    console.log(`[MessageHandler] User language: ${userLang}`);
     
     // Define office location (you can adjust these coordinates)
     const officeLat = 37.909170; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
@@ -678,14 +516,7 @@ Would you like to share your location?
       officeLat, officeLng
     );
     
-    console.log(`[MessageHandler] User location: ${location.latitude}, ${location.longitude}`);
-    console.log(`[MessageHandler] Office location: ${officeLat}, ${officeLng}`);
-    console.log(`[MessageHandler] Distance: ${distance.toFixed(2)} km`);
-    console.log(`[MessageHandler] Max distance: ${maxDistance} km`);
-    console.log(`[MessageHandler] Is within range: ${distance <= maxDistance}`);
-    
     if (distance <= maxDistance) {
-      console.log(`[MessageHandler] Location valid, proceeding with action: ${session.action}`);
       // Location is valid, proceed with action
       if (session.action === 'checkin') {
         await this.processCheckIn(chatId, userId, session.userName, session.messageId);
@@ -693,7 +524,6 @@ Would you like to share your location?
         await this.processCheckOut(chatId, userId, session.userName, session.messageId);
       }
     } else {
-      console.log(`[MessageHandler] Location invalid, sending error message`);
       // Location is invalid
       const errorMsg = userLang === 'gr'
         ? `❌ Δεν είστε στο γραφείο. Απόσταση: ${distance.toFixed(2)} km\n\n📍 Παρακαλώ μετακινηθείτε στο γραφείο και δοκιμάστε ξανά.`
@@ -731,10 +561,8 @@ Would you like to share your location?
       
       if (!worker) {
         // Create worker in WORKERS sheet if not exists
-        console.log(`[MessageHandler] Creating new worker in WORKERS sheet for user ${userId}`);
         await this.sheets.addWorker(userName, userId, 'WORKING');
         worker = { name: userName, id: userId.toString(), status: 'WORKING' };
-        console.log(`[MessageHandler] Worker created: ${worker.name}, ID: ${worker.id}, Status: ${worker.status}`);
       }
       
       // Get current month sheet name
@@ -746,8 +574,6 @@ Would you like to share your location?
       
       // If user not found, create a new row
       if (!rowNumber) {
-        console.log(`[MessageHandler] User "${worker.name}" not found, creating new row in ${sheetName}`);
-        
         // Get the next available row
         const rowsRaw = await this.sheets.getRows(`${sheetName}!A2:Z1000`);
         const rows = rowsRaw as string[][];
@@ -757,7 +583,6 @@ Would you like to share your location?
         try {
           await this.sheets.updateCell(`${sheetName}!A${nextRow}`, worker.name);
           rowNumber = nextRow;
-          console.log(`[MessageHandler] Created new row ${rowNumber} for user "${worker.name}"`);
           
           // Clear cache for this month sheet to ensure fresh data for check-out
           if (this.sheets.clearCacheForMonthSheet) {
@@ -831,7 +656,6 @@ Would you like to share your location?
         
         // Schedule reminder for 7.5 hours later
         const reminderTime = new Date(now.getTime() + (7.5 * 60 * 60 * 1000)); // 7.5 hours in milliseconds
-        console.log(`[MessageHandler] Scheduling check-out reminder for ${reminderTime.toLocaleString()}`);
         
         // Store reminder info for later use
         setTimeout(async () => {
@@ -978,11 +802,7 @@ Would you like to share your location?
 
   // Show main menu for working users
   public async showWorkingUserMainMenu(chatId: number, userId: number, userName: string): Promise<void> {
-    const startTime = Date.now();
-    console.log(`[MessageHandler] showWorkingUserMainMenu called at ${new Date().toISOString()}`);
-    
     const userLang = await this.getUserLanguage(userId);
-    console.log(`[MessageHandler] User language: ${userLang} at ${new Date().toISOString()}`);
     
     const keyboard = {
       inline_keyboard: [
@@ -992,7 +812,6 @@ Would you like to share your location?
     };
     
     await this.bot.sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
-    console.log(`[MessageHandler] Main menu sent at ${new Date().toISOString()}, total time: ${Date.now() - startTime}ms`);
   }
 
   // Check if user has ongoing check-out session
