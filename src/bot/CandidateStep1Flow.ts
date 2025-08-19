@@ -142,6 +142,25 @@ export class CandidateStep1Flow {
   // Helper method to check if user has "working" status
   private async getUserStatus(userId: number): Promise<{ status: string; name: string } | null> {
     try {
+      console.log(`[CandidateStep1Flow] Checking user status for ${userId} - checking WORKERS sheet first`);
+      
+      // FIRST: Check WORKERS sheet for working users
+      try {
+        const worker = await this.sheets.getWorkerById(userId);
+        if (worker && worker.status === 'WORKING') {
+          console.log(`[CandidateStep1Flow] User ${userId} found in WORKERS sheet with status: ${worker.status}`);
+          return {
+            status: worker.status,
+            name: worker.name
+          };
+        }
+        console.log(`[CandidateStep1Flow] User ${userId} not found in WORKERS sheet or status not WORKING`);
+      } catch (error) {
+        console.log(`[CandidateStep1Flow] Error checking WORKERS sheet:`, error);
+      }
+      
+      // SECOND: Fallback to main sheet for other statuses
+      console.log(`[CandidateStep1Flow] Checking main sheet for user ${userId}`);
       const header = await this.sheets.getHeaderRow();
       const rowsRaw = await this.sheets.getRows('A3:Z1000');
       if (!rowsRaw || !rowsRaw.length) return null;
@@ -166,13 +185,14 @@ export class CandidateStep1Flow {
         
         const rowUserId = parseInt(row[userIdCol] || '', 10);
         if (rowUserId === userId) {
-          return {
-            status: (row[statusCol] || '').trim(),
-            name: (row[nameCol] || '').trim()
-          };
+          const status = (row[statusCol] || '').trim();
+          const name = (row[nameCol] || '').trim();
+          console.log(`[CandidateStep1Flow] User ${userId} found in main sheet with status: ${status}, name: ${name}`);
+          return { status, name };
         }
       }
       
+      console.log(`[CandidateStep1Flow] User ${userId} not found in any sheet`);
       return null;
     } catch (error) {
       console.error('[CandidateStep1Flow] Error getting user status:', error);
