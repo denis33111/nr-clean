@@ -114,7 +114,41 @@ export class GoogleSheetsClient {
 
   // WORKERS sheet methods
   async getWorkersSheet(): Promise<string[][]> {
-    return this.getRows('WORKERS!A2:C1000');
+    try {
+      return await this.getRows('WORKERS!A2:C1000');
+    } catch (error) {
+      console.error('[GoogleSheetsClient] Error accessing WORKERS sheet:', error);
+      
+      // If WORKERS sheet fails, try to access main sheet as fallback
+      try {
+        console.log('[GoogleSheetsClient] Falling back to main sheet for worker data');
+        const mainSheetRows = await this.getRows("'Φύλλο1'!A3:Z1000");
+        const mainSheetHeader = await this.getHeaderRow("'Φύλλο1'!A2:Z2");
+        
+        // Find relevant columns in main sheet
+        const nameCol = mainSheetHeader.findIndex(h => h === 'NAME');
+        const userIdCol = mainSheetHeader.findIndex(h => h === 'user id');
+        const statusCol = mainSheetHeader.findIndex(h => h === 'STATUS');
+        
+        if (nameCol !== -1 && userIdCol !== -1 && statusCol !== -1) {
+          // Convert main sheet data to worker format
+          const workerRows: string[][] = [];
+          for (const row of mainSheetRows) {
+            if (row[nameCol] && row[userIdCol] && row[statusCol]) {
+              workerRows.push([row[nameCol], row[userIdCol], row[statusCol]]);
+            }
+          }
+          console.log(`[GoogleSheetsClient] Converted ${workerRows.length} rows from main sheet to worker format`);
+          return workerRows;
+        }
+      } catch (fallbackError) {
+        console.error('[GoogleSheetsClient] Fallback to main sheet also failed:', fallbackError);
+      }
+      
+      // Return empty array if all else fails
+      console.warn('[GoogleSheetsClient] Returning empty worker data due to sheet access errors');
+      return [];
+    }
   }
 
   async getWorkerById(userId: number): Promise<{ name: string; status: string; id: string } | null> {

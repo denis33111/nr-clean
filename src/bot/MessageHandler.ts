@@ -84,6 +84,7 @@ export class MessageHandler {
   // Helper method to get user's language from Google Sheets
   public async getUserLanguage(userId: number): Promise<'en' | 'gr'> {
     try {
+      // Try to get from main sheet first
       const header = await this.sheets.getHeaderRow();
       const rowsRaw = await this.sheets.getRows('A3:Z1000');
       if (!rowsRaw || !rowsRaw.length) return 'en';
@@ -111,7 +112,20 @@ export class MessageHandler {
       
       return 'en';
     } catch (error) {
-      console.error('[MessageHandler] Error getting user language:', error);
+      console.error('[MessageHandler] Error getting user language from main sheet:', error);
+      
+      // Fallback: try to get from WORKERS sheet
+      try {
+        const worker = await this.sheets.getWorkerById(userId);
+        if (worker) {
+          // Default to Greek for working users (most likely in Greece)
+          return 'gr';
+        }
+      } catch (workerError) {
+        console.error('[MessageHandler] Error getting worker info for language fallback:', workerError);
+      }
+      
+      // Final fallback: return English
       return 'en';
     }
   }
@@ -152,6 +166,46 @@ export class MessageHandler {
     } catch (error) {
       console.error('[MessageHandler] Error getting user status:', error);
       return null;
+    }
+  }
+
+  // Cached user status to avoid repeated sheet calls
+  private userStatusCache = new Map<number, { status: string; name: string; timestamp: number }>();
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  // Helper method to get cached user status
+  public async getCachedUserStatus(userId: number): Promise<{ status: string; name: string } | null> {
+    const now = Date.now();
+    const cached = this.userStatusCache.get(userId);
+    
+    // Return cached data if still valid
+    if (cached && (now - cached.timestamp) < this.CACHE_DURATION) {
+      console.log(`[MessageHandler] Using cached user status for ${userId}: ${cached.status}`);
+      return { status: cached.status, name: cached.name };
+    }
+    
+    // Get fresh data
+    const status = await this.getUserStatus(userId);
+    if (status) {
+      // Cache the result
+      this.userStatusCache.set(userId, {
+        ...status,
+        timestamp: now
+      });
+      console.log(`[MessageHandler] Cached user status for ${userId}: ${status.status}`);
+    }
+    
+    return status;
+  }
+
+  // Clear user status cache (call when user status changes)
+  public clearUserStatusCache(userId?: number): void {
+    if (userId) {
+      this.userStatusCache.delete(userId);
+      console.log(`[MessageHandler] Cleared cache for user ${userId}`);
+    } else {
+      this.userStatusCache.clear();
+      console.log('[MessageHandler] Cleared all user status cache');
     }
   }
 
