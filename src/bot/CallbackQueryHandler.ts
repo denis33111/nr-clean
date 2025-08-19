@@ -404,18 +404,22 @@ Common issues and solutions:
 
     switch (action) {
       case 'checkin':
-        // Get user status and start check-in
-        const userStatus = await messageHandler.getUserStatus(userId);
-        if (userStatus) {
-          await messageHandler.handleWorkingUserCheckIn(chatId, userId, userStatus.name, messageId);
+        // Get user name from WORKERS sheet (no main sheet reading)
+        const workerForCheckin = await this.sheets.getWorkerById(userId);
+        if (workerForCheckin) {
+          await messageHandler.handleWorkingUserCheckIn(chatId, userId, workerForCheckin.name, messageId);
+        } else {
+          await this.bot.sendMessage(chatId, '❌ Error: User not found in workers list.');
         }
         break;
         
       case 'checkout':
-        // Get user status and start check-out
-        const userStatusForCheckout = await messageHandler.getUserStatus(userId);
-        if (userStatusForCheckout) {
-          await messageHandler.handleWorkingUserCheckOut(chatId, userId, userStatusForCheckout.name, messageId);
+        // Get user name from WORKERS sheet (no main sheet reading)
+        const workerForCheckout = await this.sheets.getWorkerById(userId);
+        if (workerForCheckout) {
+          await messageHandler.handleWorkingUserCheckOut(chatId, userId, workerForCheckout.name, messageId);
+        } else {
+          await this.bot.sendMessage(chatId, '❌ Error: User not found in workers list.');
         }
         break;
         
