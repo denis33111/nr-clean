@@ -31,6 +31,10 @@ export class ReminderService {
       timezone: 'Europe/Athens'
     });
     
+    console.log('🔍 [ReminderService] Daily 10:00 AM Greece time cron job scheduled successfully');
+    console.log('🔍 [ReminderService] Cron pattern: 0 7 * * * (UTC 7:00 = Greece 10:00)');
+    console.log('🔍 [ReminderService] Timezone: Europe/Athens (GMT+3)');
+    
     // Run no-response check at 18:00 (6 PM) every day
     cron.schedule('0 18 * * *', () => {
       console.log('[ReminderService] Running no-response check at 6:00 PM');
@@ -862,25 +866,37 @@ export class ReminderService {
   // NEW: Daily 10:00 AM Greece time check of main sheet for course reminders
   private async checkMainSheetForCourseReminders(): Promise<void> {
     try {
-      console.log('[ReminderService] Starting daily 10:00 AM course reminder check...');
+      console.log('🔍 [ReminderService] ===== STARTING DAILY 10:00 AM COURSE REMINDER CHECK =====');
+      console.log('🔍 [ReminderService] Step 1: Getting current time in Greece timezone...');
       
       // Get today's date in Greece timezone
       const now = new Date();
       const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
       const today = greeceTime.toISOString().split('T')[0]; // YYYY-MM-DD format
       
-      console.log(`[ReminderService] Checking for candidates with course date: ${today}`);
+      console.log('🔍 [ReminderService] Step 2: Time calculation results:');
+      console.log(`   - Server time (UTC): ${now.toISOString()}`);
+      console.log(`   - Greece time: ${greeceTime.toLocaleString('en-US', { timeZone: 'Europe/Athens' })}`);
+      console.log(`   - Today's date (YYYY-MM-DD): ${today}`);
+      console.log(`   - Looking for candidates with course date: ${today}`);
+      
+      console.log('🔍 [ReminderService] Step 3: Reading main sheet header...');
       
       // Read main sheet to find candidates with course date = today
       const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
+      console.log('🔍 [ReminderService] Step 4: Header row retrieved:');
+      console.log(`   - Header columns: ${header.join(', ')}`);
+      
+      console.log('🔍 [ReminderService] Step 5: Reading main sheet data rows...');
       const rowsRaw = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
       
       if (!rowsRaw || !rowsRaw.length) {
-        console.log('[ReminderService] No data found in main sheet');
+        console.log('❌ [ReminderService] ERROR: No data found in main sheet');
         return;
       }
       
       const rows = rowsRaw as string[][];
+      console.log(`🔍 [ReminderService] Step 6: Data rows retrieved: ${rows.length} rows found`);
       
       // Find column indices
       const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
@@ -889,17 +905,34 @@ export class ReminderService {
       const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
       const colStatus = header.findIndex(h => h === 'STATUS');
       
+      console.log('🔍 [ReminderService] Step 7: Column mapping results:');
+      console.log(`   - COURSE DATE column: ${colCourseDate} (${colCourseDate !== -1 ? 'FOUND' : 'NOT FOUND'})`);
+      console.log(`   - NAME column: ${colName} (${colName !== -1 ? 'FOUND' : 'NOT FOUND'})`);
+      console.log(`   - user id column: ${colUserId} (${colUserId !== -1 ? 'FOUND' : 'NOT FOUND'})`);
+      console.log(`   - REMINDERSENT column: ${colReminderSent} (${colReminderSent !== -1 ? 'FOUND' : 'NOT FOUND'})`);
+      console.log(`   - STATUS column: ${colStatus} (${colStatus !== -1 ? 'FOUND' : 'NOT FOUND'})`);
+      
       if (colCourseDate === -1 || colName === -1 || colUserId === -1) {
-        console.log('[ReminderService] Required columns not found in main sheet');
+        console.log('❌ [ReminderService] ERROR: Required columns not found in main sheet');
         return;
       }
       
       let remindersSent = 0;
+      let candidatesChecked = 0;
+      let candidatesWithCourseToday = 0;
+      let candidatesSkipped = 0;
+      
+      console.log('🔍 [ReminderService] Step 8: Starting to process each row...');
       
       // Check each row for candidates with course date = today
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (!row || !row[colCourseDate] || !row[colName]) continue;
+        candidatesChecked++;
+        
+        if (!row || !row[colCourseDate] || !row[colName]) {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - no course date or name`);
+          continue;
+        }
         
         const courseDate = row[colCourseDate].trim();
         const candidateName = row[colName].trim();
@@ -907,73 +940,126 @@ export class ReminderService {
         const reminderSent = row[colReminderSent]?.trim();
         const status = row[colStatus]?.trim();
         
+        console.log(`🔍 [ReminderService] Row ${i + 3}: Processing candidate "${candidateName}"`);
+        console.log(`   - Course date: "${courseDate}"`);
+        console.log(`   - User ID: "${userIdStr}"`);
+        console.log(`   - Reminder sent: "${reminderSent}"`);
+        console.log(`   - Status: "${status}"`);
+        
         // Skip if no course date or already sent reminder
-        if (!courseDate || reminderSent === 'YES') continue;
+        if (!courseDate) {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - no course date`);
+          candidatesSkipped++;
+          continue;
+        }
+        
+        if (reminderSent === 'YES') {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - reminder already sent`);
+          candidatesSkipped++;
+          continue;
+        }
         
         // Skip if status is not WAITING (candidate already confirmed or rejected)
-        if (status && status !== 'WAITING') continue;
+        if (status && status !== 'WAITING') {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - status is "${status}" (not WAITING)`);
+          candidatesSkipped++;
+          continue;
+        }
+        
+        console.log(`🔍 [ReminderService] Row ${i + 3}: Candidate "${candidateName}" passed initial checks, parsing date...`);
         
         // Parse course date safely
         let parsedCourseDate: Date | null = null;
         try {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Attempting to parse date "${courseDate}"`);
+          
           // Try multiple date formats
           const dateFormats = [
             courseDate, // YYYY-M-D
             courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-$3'), // Ensure proper format
-            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-$3'), // Add leading zeros
-            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-0$3')  // Add leading zeros
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-$3'), // Add leading zeros to month
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-$2-0$3'), // Add leading zeros to day
+            courseDate.replace(/(\d+)-(\d+)-(\d+)/, '$1-0$2-0$3') // Add leading zeros to both
           ];
           
-          for (const format of dateFormats) {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Trying date formats: ${dateFormats.join(', ')}`);
+          
+          for (let j = 0; j < dateFormats.length; j++) {
+            const format = dateFormats[j];
             const testDate = new Date(format + 'T00:00:00');
+            console.log(`🔍 [ReminderService] Row ${i + 3}: Format ${j + 1} "${format}" -> ${testDate.toISOString()} (valid: ${!isNaN(testDate.getTime())})`);
+            
             if (!isNaN(testDate.getTime())) {
               parsedCourseDate = testDate;
+              console.log(`🔍 [ReminderService] Row ${i + 3}: SUCCESS! Parsed date: ${parsedCourseDate.toISOString()}`);
               break;
             }
           }
         } catch (error) {
-          console.warn(`[ReminderService] Failed to parse course date "${courseDate}" for ${candidateName}:`, error);
+          console.warn(`⚠️ [ReminderService] Row ${i + 3}: Failed to parse course date "${courseDate}" for ${candidateName}:`, error);
+          candidatesSkipped++;
           continue;
         }
         
         if (!parsedCourseDate) {
-          console.warn(`[ReminderService] Invalid course date "${courseDate}" for ${candidateName}`);
+          console.warn(`⚠️ [ReminderService] Row ${i + 3}: Invalid course date "${courseDate}" for ${candidateName} - skipping`);
+          candidatesSkipped++;
           continue;
         }
         
         // Check if course date is today
         const courseDateStr = parsedCourseDate.toISOString().split('T')[0];
+        console.log(`🔍 [ReminderService] Row ${i + 3}: Comparing course date "${courseDateStr}" with today "${today}"`);
+        
         if (courseDateStr === today) {
-          console.log(`[ReminderService] Found candidate ${candidateName} with course today: ${courseDate}`);
+          candidatesWithCourseToday++;
+          console.log(`🎯 [ReminderService] Row ${i + 3}: MATCH! Candidate "${candidateName}" has course today: ${courseDate}`);
           
           // Send reminder if user ID exists
           if (userIdStr && !isNaN(parseInt(userIdStr))) {
             const userId = parseInt(userIdStr);
+            console.log(`🔍 [ReminderService] Row ${i + 3}: Valid user ID found: ${userId}`);
             
             try {
+              console.log(`🔍 [ReminderService] Row ${i + 3}: Sending reminder to ${candidateName} (${userId})...`);
               await this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
+              console.log(`✅ [ReminderService] Row ${i + 3}: Reminder sent successfully to ${candidateName}`);
               
               // Update REMINDERSENT column to YES
               const rowNum = i + 3; // data starts at row 3
               if (colReminderSent !== -1) {
+                console.log(`🔍 [ReminderService] Row ${i + 3}: Updating REMINDERSENT column to YES...`);
                 await this.sheets.updateCell(`'Φύλλο1'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
-                console.log(`[ReminderService] Updated REMINDERSENT to YES for ${candidateName}`);
+                console.log(`✅ [ReminderService] Row ${i + 3}: REMINDERSENT updated to YES for ${candidateName}`);
+              } else {
+                console.log(`⚠️ [ReminderService] Row ${i + 3}: REMINDERSENT column not found, cannot update`);
               }
               
               remindersSent++;
             } catch (error) {
-              console.error(`[ReminderService] Failed to send reminder to ${candidateName}:`, error);
+              console.error(`❌ [ReminderService] Row ${i + 3}: Failed to send reminder to ${candidateName}:`, error);
             }
           } else {
-            console.log(`[ReminderService] No valid user ID for ${candidateName}, skipping reminder`);
+            console.log(`⚠️ [ReminderService] Row ${i + 3}: No valid user ID for ${candidateName}, skipping reminder`);
+            candidatesSkipped++;
           }
+        } else {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: No match - course date "${courseDateStr}" is not today "${today}"`);
         }
       }
       
-      console.log(`[ReminderService] Daily reminder check completed. Sent ${remindersSent} reminders.`);
+      console.log('🔍 [ReminderService] ===== DAILY REMINDER CHECK COMPLETED =====');
+      console.log('📊 [ReminderService] FINAL STATISTICS:');
+      console.log(`   - Total rows checked: ${candidatesChecked}`);
+      console.log(`   - Candidates with course today: ${candidatesWithCourseToday}`);
+      console.log(`   - Reminders sent: ${remindersSent}`);
+      console.log(`   - Candidates skipped: ${candidatesSkipped}`);
+      console.log(`   - Remaining pending reminders: ${this.pendingReminders.size}`);
+      console.log('🔍 [ReminderService] ===== END OF DAILY REMINDER CHECK =====');
       
     } catch (error) {
-      console.error('[ReminderService] Error during daily course reminder check:', error);
+      console.error('❌ [ReminderService] CRITICAL ERROR during daily course reminder check:', error);
+      console.error('❌ [ReminderService] Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     }
   }
 } 
