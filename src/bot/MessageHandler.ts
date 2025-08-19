@@ -804,14 +804,18 @@ Is there something specific about the hiring process you need help with?
   public async showWorkingUserMainMenu(chatId: number, userId: number, userName: string): Promise<void> {
     const userLang = await this.getUserLanguage(userId);
     
+    const messageText = userLang === 'gr' 
+      ? `Γεια σας ${userName}! 🎉\n\nΕπιλέξτε μια ενέργεια:`
+      : `Hello ${userName}! 🎉\n\nChoose an action:`;
+    
     const keyboard = {
       inline_keyboard: [
-        [{ text: userLang === 'gr' ? '📝 Log In' : '📝 Log In', callback_data: 'working_checkin' },
-         { text: userLang === 'gr' ? '📞 Επικοινωνία' : '📞 Contact', callback_data: 'working_contact' }]
+        [{ text: userLang === 'gr' ? '📝 Σύνδεση' : '📝 Log In', callback_data: 'working_checkin' }],
+        [{ text: userLang === 'gr' ? '📞 Επικοινωνία' : '📞 Contact', callback_data: 'working_contact' }]
       ]
     };
     
-    await this.bot.sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
+    await this.bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
   }
 
   // Check if user has ongoing check-out session
