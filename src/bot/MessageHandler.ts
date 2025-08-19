@@ -206,10 +206,19 @@ export class MessageHandler {
       return { status: cached.status, name: cached.name };
     }
     
-    // For working users, don't read sheets - just return null if cache expired
-    // This prevents unnecessary month sheet reading
-    console.log(`[MessageHandler] Cache expired for ${userId}, but not reading sheets for working users`);
-    return null;
+    // Cache expired - get fresh data from sheets
+    console.log(`[MessageHandler] Cache expired for ${userId}, getting fresh data from sheets`);
+    const status = await this.getUserStatus(userId);
+    if (status) {
+      // Cache the result
+      this.userStatusCache.set(userId, {
+        ...status,
+        timestamp: now
+      });
+      console.log(`[MessageHandler] Cached user status for ${userId}: ${status.status}`);
+    }
+    
+    return status;
   }
 
   // Clear user status cache (call when user status changes)
