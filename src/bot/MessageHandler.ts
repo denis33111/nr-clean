@@ -206,18 +206,10 @@ export class MessageHandler {
       return { status: cached.status, name: cached.name };
     }
     
-    // Get fresh data
-    const status = await this.getUserStatus(userId);
-    if (status) {
-      // Cache the result
-      this.userStatusCache.set(userId, {
-        ...status,
-        timestamp: now
-      });
-      console.log(`[MessageHandler] Cached user status for ${userId}: ${status.status}`);
-    }
-    
-    return status;
+    // For working users, don't read sheets - just return null if cache expired
+    // This prevents unnecessary month sheet reading
+    console.log(`[MessageHandler] Cache expired for ${userId}, but not reading sheets for working users`);
+    return null;
   }
 
   // Clear user status cache (call when user status changes)
@@ -231,19 +223,23 @@ export class MessageHandler {
     }
   }
 
-  // Helper method to get current month sheet name
+  // Helper method to get current month sheet name (Greece timezone)
   public getCurrentMonthSheetName(): string {
     const now = new Date();
-    const month = now.getMonth() + 1; // getMonth() returns 0-11
+    // Convert to Greece timezone (UTC+3)
+    const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
+    const month = greeceTime.getMonth() + 1; // getMonth() returns 0-11
     return `month_${month}`;
   }
 
-  // Helper method to get current date in DD/MM/YYYY format
+  // Helper method to get current date in DD/MM/YYYY format (Greece timezone)
   public getCurrentDate(): string {
     const now = new Date();
-    const day = now.getDate().toString().padStart(2, '0');
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const year = now.getFullYear();
+    // Convert to Greece timezone (UTC+3)
+    const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
+    const day = greeceTime.getDate().toString().padStart(2, '0');
+    const month = (greeceTime.getMonth() + 1).toString().padStart(2, '0');
+    const year = greeceTime.getFullYear();
     return `${day}/${month}/${year}`;
   }
 
@@ -343,12 +339,10 @@ export class MessageHandler {
       }
 
       // Check if user has "working" status and show check-in
-      const userStatus = await this.getUserStatus(userId);
-      if (userStatus && userStatus.status.toLowerCase() === 'working') {
-        await this.showWorkingUserMainMenu(chatId, userId, userStatus.name);
-        return;
-      }
-
+      // For working users, we don't need to read sheets here
+      // They should use the /start command which already checks their status
+      // This prevents unnecessary month sheet reading during regular messages
+      
       // Process the message based on content
       await this.processMessage(chatId, userId, text, user);
 
