@@ -44,8 +44,23 @@ export class MessageHandler {
     } else {
       // Fallback: create new instance only if none provided
       const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
-      const keyFilePath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE || 'secrets/google-service-account.json';
-      this.sheets = new GoogleSheetsClient(spreadsheetId!, keyFilePath);
+      
+      // Create proper Google credentials object
+      const googleCredentials = {
+        type: "service_account",
+        project_id: process.env.GOOGLE_PROJECT_ID || "newrest-465515",
+        private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID || "06ff20aa633e299bf6a881c5459aaeb07ab6cc5f",
+        private_key: process.env.GOOGLE_PRIVATE_KEY || "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCqW+8DfGLahsBQ\nzfsDUJDpIaVoEtar4MfUSPtl758enm09ZGRlNk1gFxb5tugYUARMFJCKEqeEqUdN\nRNKv3kBZoT2i4PdYkWN/PqWCyRCwoX6NbC9YtHON3Or+96QgUWik/63O5DLOI6uJ\n04cJva0x7ET/Wtv7mFGEVqoJ3sM38nxolr7S6WZ8LKZkDMnj8X+XuY96m4xCQjYu\nNcGE8xadhU70IrPtE4v8o6QzQeAMVIWgMFGSnqQTamPwjD8JrEZ+vPYBP9H25JZP\n7GA6PW5GjxLT8uvEzH5JMBfe0hO5AfAIJbuFNBKOkAv5S9u7hzrDF4mjUeYQJuaD\ni94tliq9AgMBAAECggEAGdT14afvT2aGa9pH+SEyz/73l1ff8FEVy/VDFZpnnNt2\nAgyigoxg4DSwGa5n9CPR+v1VS3J3r1CBzNAmSF+hj1W5RGTrbKUjGqzTqQi2/KmI\nSIaCiWdXbEf25DGF1Ba0EOzqHIiSwZo8DRqji9EUnZDPh47t83ENz0za3MNIA8gE\nL3vLAVZhzCLgUXnBlBIxzv/gtnqViKNOj7CcSYDWFYGH1YR3Tg2tFfc81vZEKbo0\nQHBsZPD7RswGlK9bmhqqX+22pBNzvIAvaevzow08ohb75hY5gjOFtuuj1iFX/QS9\n4LQBjRwH0kF7n/xgSwKgYqJLJYOL8Brr/ON75AcWQQKBgQDdYSW7qr2xUwiNVGtW\nljunbzBJlGXLNfg60H5uHNBfzL7oXu5pc4S3cI6H8QSStP+yhiUb+JrdjA1TKouG\nW08bTHVqV132C/8vSsrBvKMztpmqoInjSMGcTTbm2MH56Okg9uEW/b1t6PFKRgCW\nT0T86qi2anMYR319W6q+ysDeoQKBgQDFADQCs+a98dp5X1VTQuWEqXPPBBJ8qOGh\nvl3y1rYnrbYZHkVWHkmERbHvfm1lCpsJakWdJsate10vQZR3XXRhRC5cxWfO6NMJ\neqTEUhHRyK5sQaCO/BLsH2lSkgfasGeqfP2jiM0I0vo5YwXP9KO8nxwtMoqAj7Hl\niOiwa5RinQKBgA8RpszgcWsZmNJt9aR+M29RPTs087ziXpQ6TvDV20U6HaCZnabl\n6xnFep48RLBry5/uS6ZcxMXh26JWmgq6OmdETBXB/q5Z4LPqZmTLn1xMyKb5qIkl\nEbC+/Ma36HRHa18IDwhOm09Y9Nu2aiHRIYQJwRQxqMX1T9Bxpey4xmohAoGAXmMC\niGj5nPhL3Os4TnQ206D8w6sH0IJ52K0FBlypWcl4/f/q6KAKST27Sywf7dFvBsvM\nHsd9WZFJzGJ3Z9l28UNhk0Fhw1j6BAim+Qj5ULH+IBAxhVBxIIDMTat55+WtRZot\nTDU3R4sOKICxQDnOWYlCTsVwZrhyW6+FDUH+DmECgYEAxB9+AYI8DnKTRoSt9PKl\nr+eE8cDWvwq2x2AWWupXmYWiBvruDNjmShlsPa5r9UEFZLl4uiTBExcJWSJm8Jwd\nbZ6F5TtyLyTKs77TWxwFQe1uInuuBYzXk0h4hAZlxK6Hv+T2sW9Idt0pVx6wESc4\nHtkkHOv/tYIKHVpFTVD6kEA=\n-----END PRIVATE KEY-----",
+        client_email: process.env.GOOGLE_CLIENT_EMAIL || "newresttelegrambotservice@newrest-465515.iam.gserviceaccount.com",
+        client_id: process.env.GOOGLE_CLIENT_ID || "110694577902197703065",
+        auth_uri: "https://accounts.google.com/o/oauth2/auth",
+        token_uri: "https://oauth2.googleapis.com/token",
+        auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+        client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/newresttelegrambotservice%40newrest-465515.iam.gserviceaccount.com",
+        universe_domain: "googleapis.com"
+      };
+      
+      this.sheets = new GoogleSheetsClient(spreadsheetId!, googleCredentials);
     }
     
     this.setupSessionCleanup();
