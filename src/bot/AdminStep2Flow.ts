@@ -583,7 +583,7 @@ export class AdminStep2Flow {
     if (msg.text && !msg.text.startsWith('/')) {
       // Handle custom date input first (special case)
       if (session.awaitingCustomDate) {
-        session.answers['COURSEDATE'] = msg.text.trim();
+        session.answers['COURSE_DATE'] = msg.text.trim();
         session.awaitingCustomDate = false;
         session.step = 3; // notes
         await this.handleNextStep(userId, msg.chat.id);
@@ -687,7 +687,7 @@ export class AdminStep2Flow {
           reply_markup: { force_reply: true }
         });
       } else {
-        sess.answers['COURSEDATE'] = dateStr;
+        sess.answers['COURSE_DATE'] = dateStr;
         sess.step = 3; // move to notes
         await this.bot.answerCallbackQuery(query.id);
         await this.handleNextStep(query.from.id, query.message!.chat.id);
