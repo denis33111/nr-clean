@@ -232,23 +232,19 @@ export class MessageHandler {
     }
   }
 
-  // Helper method to get current month sheet name (Greece timezone)
+  // Helper method to get current month sheet name
   public getCurrentMonthSheetName(): string {
     const now = new Date();
-    // Convert to Greece timezone (UTC+3)
-    const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
-    const month = greeceTime.getMonth() + 1; // getMonth() returns 0-11
+    const month = now.getMonth() + 1; // getMonth() returns 0-11
     return `month_${month}`;
   }
 
-  // Helper method to get current date in DD/MM/YYYY format (Greece timezone)
+  // Helper method to get current date in DD/MM/YYYY format
   public getCurrentDate(): string {
     const now = new Date();
-    // Convert to Greece timezone (UTC+3)
-    const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
-    const day = greeceTime.getDate().toString().padStart(2, '0');
-    const month = (greeceTime.getMonth() + 1).toString().padStart(2, '0');
-    const year = greeceTime.getFullYear();
+    const day = now.getDate().toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const year = now.getFullYear();
     return `${day}/${month}/${year}`;
   }
 
