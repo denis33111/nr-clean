@@ -569,10 +569,14 @@ Is there something specific about the hiring process you need help with?
     checkInSessions.delete(userId);
     
     // Remove the location keyboard after location is received
-    await this.bot.sendMessage(chatId, '', { reply_markup: { remove_keyboard: true } });
-    
-    // Get user's language
     const userLang = await this.getUserLanguage(userId);
+    const processingMsg = userLang === 'gr'
+      ? '⏳ Επεξεργασία τοποθεσίας...'
+      : '⏳ Processing location...';
+    
+    await this.bot.sendMessage(chatId, processingMsg, { reply_markup: { remove_keyboard: true } });
+    
+    // Get user's language (already got it above)
     
     // Define office location (you can adjust these coordinates)
     const officeLat = 37.909170; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
