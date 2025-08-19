@@ -96,6 +96,13 @@ export class MessageHandler {
     }, 5 * 60 * 1000); // Every 5 minutes
   }
 
+  // Get language for working users (no sheet reading needed)
+  public async getWorkingUserLanguage(userId: number): Promise<'en' | 'gr'> {
+    // Working users default to Greek (most likely in Greece)
+    // No need to read main sheet for this
+    return 'gr';
+  }
+
   // Helper method to get user's language from Google Sheets
   public async getUserLanguage(userId: number): Promise<'en' | 'gr'> {
     try {
@@ -475,8 +482,8 @@ Is there something specific about the hiring process you need help with?
   // Handle working user check-in
   public async handleWorkingUserCheckIn(chatId: number, userId: number, userName: string, messageId?: number): Promise<void> {
     try {
-      // Get user's language
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       
       // First, request location validation
       const locationMsg = userLang === 'gr'
@@ -505,7 +512,8 @@ Is there something specific about the hiring process you need help with?
       
     } catch (error) {
       console.error('[MessageHandler] Error handling working user check-in:', error);
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       const errorMsg = userLang === 'gr'
         ? '❌ Σφάλμα κατά την επεξεργασία του check-in. Παρακαλώ δοκιμάστε ξανά.'
         : '❌ Error processing check-in. Please try again.';
@@ -516,8 +524,8 @@ Is there something specific about the hiring process you need help with?
   // Handle working user check-out
   public async handleWorkingUserCheckOut(chatId: number, userId: number, userName: string, messageId?: number): Promise<void> {
     try {
-      // Get user's language
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       
       // First, request location validation
       const locationMsg = userLang === 'gr'
@@ -546,7 +554,8 @@ Is there something specific about the hiring process you need help with?
       
     } catch (error) {
       console.error('[MessageHandler] Error handling working user check-out:', error);
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       const errorMsg = userLang === 'gr'
         ? '❌ Σφάλμα κατά την επεξεργασία του check-out. Παρακαλώ δοκιμάστε ξανά.'
         : '❌ Error processing check-out. Please try again.';
@@ -569,7 +578,8 @@ Is there something specific about the hiring process you need help with?
     checkInSessions.delete(userId);
     
     // Remove the location keyboard after location is received
-    const userLang = await this.getUserLanguage(userId);
+    // Use working user language (no sheet reading needed)
+    const userLang = await this.getWorkingUserLanguage(userId);
     const processingMsg = userLang === 'gr'
       ? '⏳ Επεξεργασία τοποθεσίας...'
       : '⏳ Processing location...';
@@ -626,8 +636,8 @@ Is there something specific about the hiring process you need help with?
   // Process check-in after location validation
   private async processCheckIn(chatId: number, userId: number, userName: string, messageId?: number): Promise<void> {
     try {
-      // Get user's language
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       
       // First, ensure user exists in WORKERS sheet
       let worker = await this.sheets.getWorkerById(userId);
@@ -663,6 +673,8 @@ Is there something specific about the hiring process you need help with?
           }
         } catch (error) {
           console.error('[MessageHandler] Error creating new row:', error);
+          // Use working user language (no sheet reading needed)
+          const userLang = await this.getWorkingUserLanguage(userId);
           const errorMsg = userLang === 'gr'
             ? '❌ Σφάλμα κατά τη δημιουργία νέας γραμμής. Παρακαλώ επικοινωνήστε με την ομάδα.'
             : '❌ Error creating new row. Please contact the team.';
@@ -675,6 +687,8 @@ Is there something specific about the hiring process you need help with?
       const header = await this.sheets.getHeaderRow(`${sheetName}!A2:Z2`);
       const dateColumnIndex = header.findIndex(h => h === currentDate);
       if (dateColumnIndex === -1) {
+        // Use working user language (no sheet reading needed)
+        const userLang = await this.getWorkingUserLanguage(userId);
         const errorMsg = userLang === 'gr'
           ? '❌ Δεν βρέθηκε η στήλη της σημερινής ημερομηνίας. Παρακαλώ επικοινωνήστε με την ομάδα.'
           : '❌ Today\'s date column was not found. Please contact the team.';
@@ -733,6 +747,8 @@ Is there something specific about the hiring process you need help with?
         // Store reminder info for later use
         setTimeout(async () => {
           try {
+            // Use working user language (no sheet reading needed)
+            const userLang = await this.getWorkingUserLanguage(userId);
             const reminderMsg = userLang === 'gr'
               ? `⏰ Υπενθύμιση: Έχετε εργαστεί για 7.5 ώρες. Μήπως θέλετε να κάνετε check-out?`
               : `⏰ Reminder: You have been working for 7.5 hours. Would you like to check out?`;
@@ -752,6 +768,8 @@ Is there something specific about the hiring process you need help with?
         
       } catch (error) {
         console.error('[MessageHandler] Error writing check-in time:', error);
+        // Use working user language (no sheet reading needed)
+        const userLang = await this.getWorkingUserLanguage(userId);
         const errorMsg = userLang === 'gr'
           ? '❌ Σφάλμα κατά την καταγραφή της παρουσίας σας. Παρακαλώ επικοινωνήστε με την ομάδα.'
           : '❌ Error recording your attendance. Please contact the team.';
@@ -771,8 +789,8 @@ Is there something specific about the hiring process you need help with?
   // Process check-out after location validation
   private async processCheckOut(chatId: number, userId: number, userName: string, messageId?: number): Promise<void> {
     try {
-      // Get user's language
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       
       // Get worker data from WORKERS sheet
       let worker = await this.sheets.getWorkerById(userId);
@@ -798,6 +816,8 @@ Is there something specific about the hiring process you need help with?
       
       if (!rowNumber) {
         console.log(`[MessageHandler] User "${worker.name}" not found in month sheet ${sheetName}`);
+        // Use working user language (no sheet reading needed)
+        const userLang = await this.getWorkingUserLanguage(userId);
         const errorMsg = userLang === 'gr'
           ? '❌ Δεν βρέθηκε η γραμμή σας στο φύλλο του μήνα. Παρακαλώ επικοινωνήστε με την ομάδα.'
           : '❌ Your row was not found in the month sheet. Please contact the team.';
@@ -809,6 +829,8 @@ Is there something specific about the hiring process you need help with?
       const header = await this.sheets.getHeaderRow(`${sheetName}!A2:Z2`);
       const dateColumnIndex = header.findIndex(h => h === currentDate);
       if (dateColumnIndex === -1) {
+        // Use working user language (no sheet reading needed)
+        const userLang = await this.getWorkingUserLanguage(userId);
         const errorMsg = userLang === 'gr'
           ? '❌ Δεν βρέθηκε η στήλη της σημερινής ημερομηνίας. Παρακαλώ επικοινωνήστε με την ομάδα.'
           : '❌ Today\'s date column was not found. Please contact the team.';
@@ -857,6 +879,8 @@ Is there something specific about the hiring process you need help with?
         
       } catch (error) {
         console.error('[MessageHandler] Error writing check-out time:', error);
+        // Use working user language (no sheet reading needed)
+        const userLang = await this.getWorkingUserLanguage(userId);
         const errorMsg = userLang === 'gr'
           ? '❌ Σφάλμα κατά την καταγραφή της αποχώρησης σας. Παρακαλώ επικοινωνήστε με την ομάδα.'
           : '❌ Error recording your check-out. Please contact the team.';
@@ -865,7 +889,8 @@ Is there something specific about the hiring process you need help with?
       
     } catch (error) {
       console.error('[MessageHandler] Error processing check-out:', error);
-      const userLang = await this.getUserLanguage(userId);
+      // Use working user language (no sheet reading needed)
+      const userLang = await this.getWorkingUserLanguage(userId);
       const errorMsg = userLang === 'gr'
         ? '❌ Σφάλμα κατά την επεξεργασία του check-out. Παρακαλώ δοκιμάστε ξανά.'
         : '❌ Error processing check-out. Please try again.';
@@ -875,7 +900,8 @@ Is there something specific about the hiring process you need help with?
 
   // Show main menu for working users
   public async showWorkingUserMainMenu(chatId: number, userId: number, userName: string): Promise<void> {
-    const userLang = await this.getUserLanguage(userId);
+    // Use working user language (no sheet reading needed)
+    const userLang = await this.getWorkingUserLanguage(userId);
     
     const messageText = userLang === 'gr' 
       ? `Γεια σας ${userName}! 🎉\n\nΕπιλέξτε μια ενέργεια:`

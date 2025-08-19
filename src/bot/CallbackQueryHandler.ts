@@ -399,7 +399,8 @@ Common issues and solutions:
       return;
     }
     const messageHandler = new MessageHandler(this.bot, this.database, this.logger, this.sheets);
-    const userLang = await messageHandler.getUserLanguage(userId);
+    // Use working user language (no sheet reading needed)
+    const userLang = await messageHandler.getWorkingUserLanguage(userId);
 
     switch (action) {
       case 'checkin':
