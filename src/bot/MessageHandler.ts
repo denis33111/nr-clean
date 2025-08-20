@@ -840,8 +840,8 @@ Is there something specific about the hiring process you need help with?
         
         // Show success message
         const successMsg = userLang === 'gr'
-          ? `✅ Η αποχώρηση σας έχει καταγραφεί στις ${timeString}!\n\n👋 Καλή συνέχεια! 🚪`
-          : `✅ Your check-out has been recorded at ${timeString}!\n\n👋 Take care! 🚪`;
+          ? `✅ Η αποχώρηση σας έχει καταγραφεί στις ${timeString}!\n\n👋 Καλή συνέχεια!`
+          : `✅ Your check-out has been recorded at ${timeString}!\n\n👋 Take care!`;
         
         // Always send a new message for check-out success (don't edit the location request)
         await this.bot.sendMessage(chatId, successMsg);
