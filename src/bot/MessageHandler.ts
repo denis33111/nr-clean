@@ -698,12 +698,13 @@ Is there something specific about the hiring process you need help with?
       // Convert column index to letter (A=0, B=1, etc.)
       const dateColumn = String.fromCharCode(65 + dateColumnIndex); // A=65 in ASCII
       
-      // Get current time
+      // Get current time in Greece timezone
       const now = new Date();
       const timeString = now.toLocaleTimeString('en-GB', { 
         hour: '2-digit', 
         minute: '2-digit',
-        hour12: false 
+        hour12: false,
+        timeZone: 'Europe/Athens' 
       });
       
       // Write the check-in time
@@ -739,31 +740,6 @@ Is there something specific about the hiring process you need help with?
         };
         
         await this.bot.sendMessage(chatId, checkOutMsg, { reply_markup: keyboard });
-        
-        // Schedule reminder for 7.5 hours later
-        const reminderTime = new Date(now.getTime() + (7.5 * 60 * 60 * 1000)); // 7.5 hours in milliseconds
-        
-        // Store reminder info for later use
-        setTimeout(async () => {
-          try {
-            // Use working user language (no sheet reading needed)
-            const userLang = await this.getWorkingUserLanguage(userId);
-            const reminderMsg = userLang === 'gr'
-              ? `⏰ Υπενθύμιση: Έχετε εργαστεί για 7.5 ώρες. Μήπως θέλετε να κάνετε check-out?`
-              : `⏰ Reminder: You have been working for 7.5 hours. Would you like to check out?`;
-            
-            const reminderKeyboard = {
-              inline_keyboard: [
-                [{ text: userLang === 'gr' ? '🚪 Check Out' : '🚪 Check Out', callback_data: 'working_checkout' }],
-                [{ text: userLang === 'gr' ? '⏰ Αργότερα' : '⏰ Later', callback_data: 'working_reminder_later' }]
-              ]
-            };
-            
-            await this.bot.sendMessage(chatId, reminderMsg, { reply_markup: reminderKeyboard });
-          } catch (error) {
-            console.error('[MessageHandler] Error sending reminder:', error);
-          }
-        }, 7.5 * 60 * 60 * 1000); // 7.5 hours delay
         
       } catch (error) {
         console.error('[MessageHandler] Error writing check-in time:', error);
@@ -840,12 +816,13 @@ Is there something specific about the hiring process you need help with?
       // Convert column index to letter (A=0, B=1, etc.)
       const dateColumn = String.fromCharCode(65 + dateColumnIndex); // A=65 in ASCII
       
-      // Get current time
+      // Get current time in Greece timezone
       const now = new Date();
       const timeString = now.toLocaleTimeString('en-GB', { 
         hour: '2-digit', 
         minute: '2-digit',
-        hour12: false 
+        hour12: false,
+        timeZone: 'Europe/Athens' 
       });
       
       // Write the check-out time (append to existing check-in time)

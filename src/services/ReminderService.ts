@@ -17,23 +17,15 @@ export class ReminderService {
     // Restore pending reminders from Google Sheets on startup
     this.restorePendingReminders().catch(console.error);
     
-    // Run reminder check every hour to send pending reminders
-    cron.schedule('0 * * * *', () => {
-      console.log('[ReminderService] Running hourly reminder check');
-      this.processPendingReminders().catch(console.error);
+    // Single daily scan at 10:00 AM server time for all course reminders
+    cron.schedule('0 10 * * *', () => {
+      console.log('[ReminderService] Running daily 10:00 AM course reminder check');
+      this.checkMainSheetForTomorrowCourseReminders().catch(console.error);
     });
     
-    // NEW: Daily 10:00 AM Greece time check of main sheet for course reminders
-    cron.schedule('0 7 * * *', () => {
-      console.log('[ReminderService] Running daily 10:00 AM Greece time course reminder check');
-      this.checkMainSheetForCourseReminders().catch(console.error);
-    }, {
-      timezone: 'Europe/Athens'
-    });
-    
-    console.log('🔍 [ReminderService] Daily 10:00 AM Greece time cron job scheduled successfully');
-    console.log('🔍 [ReminderService] Cron pattern: 0 7 * * * (UTC 7:00 = Greece 10:00)');
-    console.log('🔍 [ReminderService] Timezone: Europe/Athens (GMT+3)');
+    console.log('🔍 [ReminderService] Daily 10:00 AM server time cron job scheduled successfully');
+    console.log('🔍 [ReminderService] Cron pattern: 0 10 * * * (10:00 AM server time)');
+    console.log('🔍 [ReminderService] Will check for candidates with courses tomorrow and send reminders');
     
     // Run no-response check at 18:00 (6 PM) every day
     cron.schedule('0 18 * * *', () => {
@@ -41,13 +33,9 @@ export class ReminderService {
       this.checkNoResponses().catch(console.error);
     });
     
-    // Run daily UI cleanup at midnight (00:00) every day - ONLY for working users
-    cron.schedule('0 0 * * *', () => {
-      console.log('[ReminderService] Starting daily UI cleanup for working users at midnight');
-      this.performDailyUICleanup().catch(console.error);
-    });
+
     
-    console.log('[ReminderService] Reminder service initialized - reminders will be scheduled when courses are added');
+    console.log('[ReminderService] Reminder service initialized - reminders will be processed daily at 10:00 AM for tomorrow\'s courses');
   }
 
   // Public method to schedule reminder for a specific course
@@ -84,167 +72,34 @@ export class ReminderService {
       return;
     }
     
-    // Parse the course date
-    const courseDateTime = parsedCourseDate;
-    const reminderDate = new Date(courseDateTime);
-    reminderDate.setDate(reminderDate.getDate() - 1); // 1 day before
-    
-    // Set reminder time to 10:00 AM Greece time (GMT+3)
-    // The server might be running in UTC, so we need to account for timezone
-    reminderDate.setHours(10, 0, 0, 0); // 10:00 AM local time
-    
-    console.log(`[ReminderService] Course date: ${courseDate}`);
-    console.log(`[ReminderService] Reminder date (local): ${reminderDate.toLocaleString('en-US', { timeZone: 'Europe/Athens' })}`);
-    console.log(`[ReminderService] Reminder date (UTC): ${reminderDate.toISOString()}`);
-    
-    const now = new Date();
-    const delayMs = reminderDate.getTime() - now.getTime();
-    
-    console.log(`[ReminderService] Course date: ${courseDate}`);
-    console.log(`[ReminderService] Reminder scheduled for: ${reminderDate.toISOString()}`);
-    console.log(`[ReminderService] Current time: ${now.toISOString()}`);
-    console.log(`[ReminderService] Delay: ${delayMs}ms (${Math.round(delayMs / 1000 / 60)} minutes)`);
-    
     // Create a unique key for this reminder
     const reminderKey = `${userId}_${courseDate}`;
     
-    // If reminder time has already passed, send immediately
-    if (delayMs <= 0) {
-      console.log(`[ReminderService] Reminder time has passed, sending immediately`);
-      // Send immediately but with a small delay to ensure proper logging
-    setTimeout(() => {
-        console.log(`[ReminderService] Sending immediate reminder to ${candidateName} (${userId}) for course on ${courseDate}`);
-      this.sendReminderForSpecificCourse(courseDate, userId, candidateName);
-      }, 5000); // 5 seconds delay
-    } else {
-      // Store the reminder in memory for immediate access
-      this.pendingReminders.set(reminderKey, {
-        courseDate,
-        candidateName,
-        userId,
-        scheduledFor: reminderDate
-      });
-      
-      // Also save to Google Sheets for persistence across server restarts
-      try {
-        await this.saveReminderToSheets(courseDate, candidateName, userId, reminderDate);
-        console.log(`[ReminderService] Saved reminder to Google Sheets for ${candidateName} (${userId})`);
-      } catch (error) {
-        console.error(`[ReminderService] Failed to save reminder to Google Sheets for ${candidateName}:`, error);
-        // Continue with in-memory storage even if Google Sheets save fails
-      }
-      
-      console.log(`[ReminderService] Stored reminder for ${candidateName} (${userId}) scheduled for ${reminderDate.toISOString()}`);
-      console.log(`[ReminderService] Total pending reminders: ${this.pendingReminders.size}`);
-    }
-  }
-
-  // Process all pending reminders - called every hour by cron
-  private async processPendingReminders(): Promise<void> {
-    const now = new Date();
-    const remindersToSend: Array<{ courseDate: string; candidateName: string; userId: number; key: string }> = [];
+    // Store the reminder in memory for the daily scan
+    this.pendingReminders.set(reminderKey, {
+      courseDate,
+      candidateName,
+      userId,
+      scheduledFor: parsedCourseDate
+    });
     
-    console.log(`[ReminderService] Processing pending reminders at ${now.toISOString()}`);
-    console.log(`[ReminderService] Total pending reminders: ${this.pendingReminders.size}`);
-    
-    // Log all pending reminders for debugging
-    if (this.pendingReminders.size > 0) {
-      console.log('[ReminderService] Current pending reminders:');
-      for (const [key, reminder] of this.pendingReminders) {
-        console.log(`  - ${key}: ${reminder.candidateName} (${reminder.userId}) for ${reminder.courseDate} at ${reminder.scheduledFor.toISOString()}`);
-      }
-    }
-    
-    // Check which reminders are due
-    for (const [key, reminder] of this.pendingReminders) {
-      if (reminder.scheduledFor <= now) {
-        remindersToSend.push({
-          courseDate: reminder.courseDate,
-          candidateName: reminder.candidateName,
-          userId: reminder.userId,
-          key
-        });
-        console.log(`[ReminderService] Reminder due: ${key} scheduled for ${reminder.scheduledFor.toISOString()}, current time: ${now.toISOString()}`);
-      } else {
-        console.log(`[ReminderService] Reminder not yet due: ${key} scheduled for ${reminder.scheduledFor.toISOString()}, current time: ${now.toISOString()}`);
-      }
-    }
-    
-    if (remindersToSend.length === 0) {
-      console.log('[ReminderService] No reminders due at this time');
-      return;
-    }
-    
-    console.log(`[ReminderService] Found ${remindersToSend.length} reminders to send`);
-    
-    // Send all due reminders
-    for (const reminder of remindersToSend) {
-      try {
-        console.log(`[ReminderService] Sending scheduled reminder to ${reminder.candidateName} (${reminder.userId}) for course on ${reminder.courseDate}`);
-        await this.sendReminderForSpecificCourse(reminder.courseDate, reminder.userId, reminder.candidateName);
-        
-        // Remove the sent reminder from pending list
-        this.pendingReminders.delete(reminder.key);
-        
-        // Also remove from Google Sheets
-        await this.removeReminderFromSheets(reminder.courseDate, reminder.userId);
-        
-        console.log(`[ReminderService] Reminder sent and removed from pending list for ${reminder.candidateName}`);
-      } catch (error) {
-        console.error(`[ReminderService] Failed to send reminder for ${reminder.candidateName}:`, error);
-        // Keep the reminder in the list to retry later
-      }
-    }
-    
-    console.log(`[ReminderService] Reminder processing completed. Remaining pending: ${this.pendingReminders.size}`);
-  }
-
-  // Remove a sent reminder from Google Sheets
-  private async removeReminderFromSheets(courseDate: string, userId: number): Promise<void> {
+    // Also save to Google Sheets for persistence across server restarts
     try {
-      const header = await this.sheets.getHeaderRow();
-      const rowsRaw = await this.sheets.getRows('A3:Z1000');
-      if (!rowsRaw || !rowsRaw.length) return;
-      
-      const rows = rowsRaw as string[][];
-      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-      
-      if (colCourseDate === -1 || colUserId === -1) return;
-      
-      // Find the row with matching course date and user ID
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row) continue; // Skip undefined rows
-        
-        const rowCourseDate = (row[colCourseDate] || '').trim();
-        const rowUserId = parseInt(row[colUserId] || '0', 10);
-        
-        if (rowCourseDate === courseDate && rowUserId === userId) {
-          // Clear the reminder data (set to empty string)
-          const updatedRow = [...row];
-          updatedRow[colCourseDate] = '';
-          updatedRow[colUserId] = '';
-          
-          // Find the SCHEDULEDFOR column and clear it too
-          const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
-          if (colScheduledFor !== -1) {
-            updatedRow[colScheduledFor] = '';
-          }
-          
-          // Update the row in Google Sheets
-          const rowNum = i + 3; // data starts at row 3
-          const range = `A${rowNum}:${String.fromCharCode(65 + header.length - 1)}${rowNum}`;
-          await this.sheets.updateRow(range, updatedRow);
-          
-          console.log(`[ReminderService] Removed reminder from Google Sheets for user ${userId}, course ${courseDate}`);
-          break;
-        }
-      }
+      await this.saveReminderToSheets(courseDate, candidateName, userId, parsedCourseDate);
+      console.log(`[ReminderService] Saved reminder to Google Sheets for ${candidateName} (${userId})`);
     } catch (error) {
-      console.error(`[ReminderService] Failed to remove reminder from Google Sheets:`, error);
+      console.error(`[ReminderService] Failed to save reminder to Google Sheets for ${candidateName}:`, error);
+      // Continue with in-memory storage even if Google Sheets save fails
     }
+    
+    console.log(`[ReminderService] Stored reminder for ${candidateName} (${userId}) for course on ${courseDate}`);
+    console.log(`[ReminderService] Total pending reminders: ${this.pendingReminders.size}`);
+    console.log(`[ReminderService] Reminder will be processed during daily 10:00 AM scan`);
   }
+
+
+
+
 
 
 
@@ -546,92 +401,9 @@ export class ReminderService {
     }
   }
 
-  // Daily UI cleanup system - ONLY for working users
-  private async performDailyUICleanup(): Promise<void> {
-    try {
-      console.log('[ReminderService] Starting daily UI cleanup for working users...');
-      
-      // Get all working users from Google Sheets
-      const workingUsers = await this.getWorkingUsers();
-      console.log(`[ReminderService] Found ${workingUsers.length} working users to clean up`);
-      
-      let cleanedCount = 0;
-      let skippedCount = 0;
-      
-      for (const user of workingUsers) {
-        try {
-          // Only clean up users with WORKING status
-          if (user.status === 'WORKING') {
-            // Check if user has ongoing check-out event
-            const hasOngoingCheckout = await this.checkIfUserHasOngoingCheckout(parseInt(user.id, 10));
-            
-            if (hasOngoingCheckout) {
-              console.log(`[ReminderService] User ${user.name} has ongoing checkout, skipping cleanup`);
-              skippedCount++;
-            } else {
-              await this.cleanupUserChatMessages(parseInt(user.id, 10));
-              cleanedCount++;
-              console.log(`[ReminderService] Cleaned up chat for user: ${user.name} (${user.id})`);
-            }
-          } else {
-            skippedCount++;
-            console.log(`[ReminderService] Skipped user: ${user.name} - status: ${user.status}`);
-          }
-        } catch (error) {
-          console.error(`[ReminderService] Error cleaning up user ${user.name}:`, error);
-        }
-      }
-      
-      console.log(`[ReminderService] Daily UI cleanup completed: ${cleanedCount} cleaned, ${skippedCount} skipped`);
-      
-      // Notify admins about the cleanup
-      if (cleanedCount > 0) {
-        await this.notifyAdmins(`🧹 Daily UI cleanup completed: ${cleanedCount} working users cleaned, ${skippedCount} skipped (ongoing checkout)`);
-      }
-      
-    } catch (error) {
-      console.error('[ReminderService] Error during daily UI cleanup:', error);
-    }
-  }
 
-  // Get all working users from Google Sheets
-  private async getWorkingUsers(): Promise<Array<{ id: string; name: string; status: string }>> {
-    try {
-      const header = await this.sheets.getHeaderRow();
-      const rowsRaw = await this.sheets.getRows('A3:Z1000');
-      if (!rowsRaw || !rowsRaw.length) return [];
-      
-      const rows = rowsRaw as string[][];
-      
-      // Find relevant columns
-      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-      const colName = header.findIndex(h => this.normalise(h) === 'NAME');
-      const colStatus = header.findIndex(h => this.normalise(h) === 'STATUS');
-      
-      if (colUserId === -1 || colName === -1 || colStatus === -1) {
-        console.log('[ReminderService] Required columns not found for working users');
-        return [];
-      }
-      
-      const workingUsers: Array<{ id: string; name: string; status: string }> = [];
-      
-      for (const row of rows) {
-        const userId = row[colUserId]?.trim();
-        const name = row[colName]?.trim();
-        const status = row[colStatus]?.trim();
-        
-        if (userId && name && status) {
-          workingUsers.push({ id: userId, name, status });
-        }
-      }
-      
-      return workingUsers;
-      
-    } catch (error) {
-      console.error('[ReminderService] Error getting working users:', error);
-      return [];
-    }
-  }
+
+
 
   // Refresh a single working user
   private async refreshWorkingUser(user: { id: string; name: string; status: string }): Promise<void> {
@@ -700,60 +472,8 @@ export class ReminderService {
     }
   }
 
-  // Check if user has ongoing check-out event
-  private async checkIfUserHasOngoingCheckout(userId: number): Promise<boolean> {
-    try {
-      // Import MessageHandler to check for ongoing sessions
-      const { MessageHandler } = await import('../bot/MessageHandler');
-      const { Database } = await import('../database/Database');
-      const { Logger } = await import('../utils/Logger');
-      
-      const database = new Database();
-      const logger = new Logger();
-      const messageHandler = new MessageHandler(this.bot, database, logger);
-      
-      // Check if user has any active check-out session
-      const hasOngoingCheckout = await messageHandler.hasOngoingCheckoutSession(userId);
-      
-      console.log(`[ReminderService] User ${userId} ongoing checkout check: ${hasOngoingCheckout}`);
-      return hasOngoingCheckout;
-      
-    } catch (error) {
-      console.error(`[ReminderService] Error checking ongoing checkout for user ${userId}:`, error);
-      // If we can't check, assume no ongoing checkout to be safe
-      return false;
-    }
-  }
 
-  // Clean up user chat messages (delete old messages)
-  private async cleanupUserChatMessages(userId: number): Promise<void> {
-    try {
-      console.log(`[ReminderService] Starting chat cleanup for user ${userId}`);
-      
-      // Get user's language preference
-      const userLang = await this.getUserLanguage(userId);
-      
-      // Send a cleanup notification message
-      const cleanupMsg = userLang === 'gr'
-        ? `🧹 Καθαρισμός συνομιλίας ολοκληρώθηκε!\n\n🌅 Καλημέρα! Είναι νέα μέρα εργασίας.\n\n📝 Επιλέξτε την ενέργειά σας:`
-        : `🧹 Chat cleanup completed!\n\n🌅 Good morning! It's a new work day.\n\n📝 Choose your action:`;
-      
-      const keyboard = {
-        inline_keyboard: [
-          [{ text: userLang === 'gr' ? '📝 Log In' : '📝 Log In', callback_data: 'working_checkin' }],
-          [{ text: userLang === 'gr' ? '📞 Επικοινωνία' : '📞 Contact', callback_data: 'working_contact' }]
-        ]
-      };
-      
-      // Send fresh daily menu (this replaces old messages)
-      await this.bot.sendMessage(userId, cleanupMsg, { reply_markup: keyboard });
-      
-      console.log(`[ReminderService] Chat cleanup completed for user ${userId}`);
-      
-    } catch (error) {
-      console.error(`[ReminderService] Error cleaning up chat for user ${userId}:`, error);
-    }
-  }
+
 
   // Restore pending reminders from Google Sheets
   private async restorePendingReminders(): Promise<void> {
@@ -844,7 +564,7 @@ export class ReminderService {
   // Public method to manually trigger reminder check (for testing)
   public async triggerReminderCheck(): Promise<void> {
     console.log('[ReminderService] Manual reminder check triggered');
-    await this.processPendingReminders();
+    await this.checkMainSheetForTomorrowCourseReminders();
   }
 
   // Public method to get current pending reminders count (for monitoring)
@@ -863,26 +583,26 @@ export class ReminderService {
     }));
   }
 
-  // NEW: Daily 10:00 AM Greece time check of main sheet for course reminders
-  private async checkMainSheetForCourseReminders(): Promise<void> {
+  // Daily 10:00 AM server time check of main sheet for tomorrow's course reminders
+  private async checkMainSheetForTomorrowCourseReminders(): Promise<void> {
     try {
-      console.log('🔍 [ReminderService] ===== STARTING DAILY 10:00 AM COURSE REMINDER CHECK =====');
-      console.log('🔍 [ReminderService] Step 1: Getting current time in Greece timezone...');
+      console.log('🔍 [ReminderService] ===== STARTING DAILY 10:00 AM TOMORROW COURSE REMINDER CHECK =====');
+      console.log('🔍 [ReminderService] Step 1: Getting current server time...');
       
-      // Get today's date in Greece timezone
+      // Get tomorrow's date in server timezone (send reminders 1 day before course)
       const now = new Date();
-      const greeceTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Athens' }));
-      const today = greeceTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD format
       
       console.log('🔍 [ReminderService] Step 2: Time calculation results:');
-      console.log(`   - Server time (UTC): ${now.toISOString()}`);
-      console.log(`   - Greece time: ${greeceTime.toLocaleString('en-US', { timeZone: 'Europe/Athens' })}`);
-      console.log(`   - Today's date (YYYY-MM-DD): ${today}`);
-      console.log(`   - Looking for candidates with course date: ${today}`);
+      console.log(`   - Server time: ${now.toLocaleString()}`);
+      console.log(`   - Tomorrow's date (YYYY-MM-DD): ${tomorrowStr}`);
+      console.log(`   - Looking for candidates with course date: ${tomorrowStr}`);
       
       console.log('🔍 [ReminderService] Step 3: Reading main sheet header...');
       
-      // Read main sheet to find candidates with course date = today
+      // Read main sheet to find candidates with course date = tomorrow
       const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
       console.log('🔍 [ReminderService] Step 4: Header row retrieved:');
       console.log(`   - Header columns: ${header.join(', ')}`);
@@ -919,12 +639,12 @@ export class ReminderService {
       
       let remindersSent = 0;
       let candidatesChecked = 0;
-      let candidatesWithCourseToday = 0;
+      let candidatesWithCourseTomorrow = 0;
       let candidatesSkipped = 0;
       
       console.log('🔍 [ReminderService] Step 8: Starting to process each row...');
       
-      // Check each row for candidates with course date = today
+      // Check each row for candidates with course date = tomorrow
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         candidatesChecked++;
@@ -987,7 +707,7 @@ export class ReminderService {
           for (let j = 0; j < dateFormats.length; j++) {
             const format = dateFormats[j];
             const testDate = new Date(format + 'T00:00:00');
-            console.log(`🔍 [ReminderService] Row ${i + 3}: Format ${j + 1} "${format}" -> ${testDate.toISOString()} (valid: ${!isNaN(testDate.getTime())})`);
+            console.log(`🔍 [ReminderService] Row ${j + 1} "${format}" -> ${testDate.toISOString()} (valid: ${!isNaN(testDate.getTime())})`);
             
             if (!isNaN(testDate.getTime())) {
               parsedCourseDate = testDate;
@@ -1007,13 +727,13 @@ export class ReminderService {
           continue;
         }
         
-        // Check if course date is today
+        // Check if course date is tomorrow
         const courseDateStr = parsedCourseDate.toISOString().split('T')[0];
-        console.log(`🔍 [ReminderService] Row ${i + 3}: Comparing course date "${courseDateStr}" with today "${today}"`);
+        console.log(`🔍 [ReminderService] Row ${i + 3}: Comparing course date "${courseDateStr}" with tomorrow "${tomorrowStr}"`);
         
-        if (courseDateStr === today) {
-          candidatesWithCourseToday++;
-          console.log(`🎯 [ReminderService] Row ${i + 3}: MATCH! Candidate "${candidateName}" has course today: ${courseDate}`);
+        if (courseDateStr === tomorrowStr) {
+          candidatesWithCourseTomorrow++;
+          console.log(`🎯 [ReminderService] Row ${i + 3}: MATCH! Candidate "${candidateName}" has course tomorrow: ${courseDate}`);
           
           // Send reminder if user ID exists
           if (userIdStr && !isNaN(parseInt(userIdStr))) {
@@ -1044,21 +764,21 @@ export class ReminderService {
             candidatesSkipped++;
           }
         } else {
-          console.log(`🔍 [ReminderService] Row ${i + 3}: No match - course date "${courseDateStr}" is not today "${today}"`);
+          console.log(`🔍 [ReminderService] Row ${i + 3}: No match - course date "${courseDateStr}" is not tomorrow "${tomorrowStr}"`);
         }
       }
       
-      console.log('🔍 [ReminderService] ===== DAILY REMINDER CHECK COMPLETED =====');
+      console.log('🔍 [ReminderService] ===== TOMORROW COURSE REMINDER CHECK COMPLETED =====');
       console.log('📊 [ReminderService] FINAL STATISTICS:');
       console.log(`   - Total rows checked: ${candidatesChecked}`);
-      console.log(`   - Candidates with course today: ${candidatesWithCourseToday}`);
+      console.log(`   - Candidates with course tomorrow: ${candidatesWithCourseTomorrow}`);
       console.log(`   - Reminders sent: ${remindersSent}`);
       console.log(`   - Candidates skipped: ${candidatesSkipped}`);
       console.log(`   - Remaining pending reminders: ${this.pendingReminders.size}`);
-      console.log('🔍 [ReminderService] ===== END OF DAILY REMINDER CHECK =====');
+      console.log('🔍 [ReminderService] ===== END OF TOMORROW COURSE REMINDER CHECK =====');
       
     } catch (error) {
-      console.error('❌ [ReminderService] CRITICAL ERROR during daily course reminder check:', error);
+      console.error('❌ [ReminderService] CRITICAL ERROR during tomorrow course reminder check:', error);
       console.error('❌ [ReminderService] Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
     }
   }
