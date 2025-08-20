@@ -717,15 +717,8 @@ Is there something specific about the hiring process you need help with?
           ? `✅ Η παρουσία σας έχει καταγραφεί στις ${timeString}!\n\n👋 Καλή δουλειά! 💪`
           : `✅ Your attendance has been recorded at ${timeString}!\n\n👋 Have a great day! 💪`;
         
-        // If messageId is provided, edit the original message
-        if (messageId) {
-          await this.bot.editMessageText(successMsg, {
-            chat_id: chatId,
-            message_id: messageId
-          });
-        } else {
-          await this.bot.sendMessage(chatId, successMsg);
-        }
+        // Always send a new message (don't edit previous)
+        await this.bot.sendMessage(chatId, successMsg);
         
         // Send second message with Check Out button
         const checkOutMsg = userLang === 'gr'
