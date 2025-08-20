@@ -233,9 +233,11 @@ export class Bot {
       const webhookUrl = `https://telegram-bot-5kmf.onrender.com/webhook`;
       await this.bot.setWebHook(webhookUrl);
       
-      // Set a custom start command that's more appropriate for working users
+      // Set commands for both working users and admins
       await this.bot.setMyCommands([
-        { command: 'start', description: 'Log In / Contact Crew' }
+        { command: 'start', description: 'Log In / Contact Crew' },
+        { command: 'reschedule', description: 'Handle course reschedule requests' },
+        { command: 'pending2', description: 'View pending candidates' }
       ]);
       
       this.logger.info('Bot started with webhook at: ' + webhookUrl);
