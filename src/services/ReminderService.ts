@@ -533,8 +533,15 @@ export class ReminderService {
   // Save a single reminder to Google Sheets
   private async saveReminderToSheets(courseDate: string, candidateName: string, userId: number, scheduledFor: Date): Promise<void> {
     try {
+      console.log(`🔍 [ReminderService] ===== STARTING saveReminderToSheets =====`);
+      console.log(`🔍 [ReminderService] Parameters: courseDate=${courseDate}, candidateName=${candidateName}, userId=${userId}, scheduledFor=${scheduledFor}`);
+      
       const header = await this.sheets.getHeaderRow();
+      console.log(`🔍 [ReminderService] Header row retrieved:`, header);
+      
       const rowsRaw = await this.sheets.getRows('A3:Z1000');
+      console.log(`🔍 [ReminderService] Data rows retrieved: ${rowsRaw ? rowsRaw.length : 0} rows`);
+      
       if (!rowsRaw || !rowsRaw.length) {
         console.log('[ReminderService] Google Sheets is empty, creating new sheet.');
         // Add header if sheet is empty
@@ -543,21 +550,75 @@ export class ReminderService {
         await this.sheets.appendRow('A2', ['', '', '', '']); // Empty row for header
       }
 
+      console.log(`🔍 [ReminderService] ===== COLUMN MAPPING DEBUG =====`);
+      
       const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
+      console.log(`🔍 [ReminderService] COURSEDATE column search:`);
+      console.log(`   - Looking for normalised: 'COURSEDATE'`);
+      console.log(`   - Found at index: ${colCourseDate}`);
+      console.log(`   - Header value at that index: '${header[colCourseDate]}'`);
+      
       const colCandidateName = header.findIndex(h => this.normalise(h) === 'NAME');
+      console.log(`🔍 [ReminderService] NAME column search:`);
+      console.log(`   - Looking for normalised: 'NAME'`);
+      console.log(`   - Found at index: ${colCandidateName}`);
+      console.log(`   - Header value at that index: '${header[colCandidateName]}'`);
+      
       const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      console.log(`🔍 [ReminderService] USERID column search:`);
+      console.log(`   - Looking for normalised: 'USERID'`);
+      console.log(`   - Found at index: ${colUserId}`);
+      console.log(`   - Header value at that index: '${header[colUserId]}'`);
+      
       const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
+      console.log(`🔍 [ReminderService] SCHEDULEDFOR column search:`);
+      console.log(`   - Looking for normalised: 'SCHEDULEDFOR'`);
+      console.log(`   - Found at index: ${colScheduledFor}`);
+      console.log(`   - Header value at that index: '${header[colScheduledFor]}'`);
+      
+      // Check for potential column name issues
+      console.log(`🔍 [ReminderService] ===== COLUMN NAME ANALYSIS =====`);
+      header.forEach((col, index) => {
+        if (col && (col.includes('COURSE') || col.includes('NAME') || col.includes('USER') || col.includes('SCHEDULE'))) {
+          console.log(`🔍 [ReminderService] Related column found at index ${index}: '${col}' (length: ${col.length})`);
+          console.log(`   - Normalised: '${this.normalise(col)}'`);
+          console.log(`   - Contains spaces: ${col.includes(' ')}`);
+          console.log(`   - Contains tabs: ${col.includes('\t')}`);
+          console.log(`   - Contains newlines: ${col.includes('\n')}`);
+          console.log(`   - Raw bytes: ${Buffer.from(col).toString('hex')}`);
+        }
+      });
 
       if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colScheduledFor === -1) {
-        console.log('[ReminderService] Required columns not found for saving reminders.');
+        console.log(`❌ [ReminderService] Required columns not found for saving reminders.`);
+        console.log(`   - COURSEDATE: ${colCourseDate === -1 ? 'NOT FOUND' : `FOUND at ${colCourseDate}`}`);
+        console.log(`   - NAME: ${colCandidateName === -1 ? 'NOT FOUND' : `FOUND at ${colCandidateName}`}`);
+        console.log(`   - USERID: ${colUserId === -1 ? 'NOT FOUND' : `FOUND at ${colUserId}`}`);
+        console.log(`   - SCHEDULEDFOR: ${colScheduledFor === -1 ? 'NOT FOUND' : `FOUND at ${colScheduledFor}`}`);
         return;
       }
 
+      console.log(`✅ [ReminderService] All required columns found successfully!`);
+      
       const newRow = [courseDate, candidateName, userId.toString(), scheduledFor.toISOString()];
+      console.log(`🔍 [ReminderService] New row data:`, newRow);
+      
+      console.log(`🔍 [ReminderService] About to append row to A3...`);
       await this.sheets.appendRow('A3', newRow); // Add new row starting from A3
+      console.log(`✅ [ReminderService] Row appended successfully!`);
+      
+      console.log(`🔍 [ReminderService] ===== saveReminderToSheets COMPLETED =====`);
       console.log(`[ReminderService] Saved reminder to Google Sheets: ${courseDate}, ${candidateName}, ${userId}, ${scheduledFor.toISOString()}`);
     } catch (error) {
       console.error(`[ReminderService] Failed to save reminder to Google Sheets:`, error);
+      console.error(`[ReminderService] Error details:`, {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+        courseDate,
+        candidateName,
+        userId,
+        scheduledFor
+      });
     }
   }
 
