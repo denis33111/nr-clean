@@ -118,15 +118,12 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-    const colConfirmed = header.findIndex(h => this.normalise(h) === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => {
-      const n = this.normalise(h);
-      return n === 'REMINDER' || n === 'REMINDERSENT';
-    });
-    const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-    const colLang = header.findIndex(h => { const n=this.normalise(h); return n==='LANG' || n==='LANGUAGE'; });
-    const nameIdx = header.findIndex(h => this.normalise(h) === 'NAME');
+    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
+    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colUserId = header.findIndex(h => h === 'user id');
+    const colLang = header.findIndex(h => h === 'LANGUAGE');
+    const nameIdx = header.findIndex(h => h === 'NAME');
 
     // Find the specific row for this user and course
     for (let i = 0; i < rows.length; i++) {
@@ -191,15 +188,12 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-    const colConfirmed = header.findIndex(h => this.normalise(h) === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => {
-      const n = this.normalise(h);
-      return n === 'REMINDER' || n === 'REMINDERSENT';
-    });
-    const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-    const colLang = header.findIndex(h => { const n=this.normalise(h); return n==='LANG' || n==='LANGUAGE'; });
-    const nameIdx = header.findIndex(h => this.normalise(h) === 'NAME');
+    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
+    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colUserId = header.findIndex(h => h === 'user id');
+    const colLang = header.findIndex(h => h === 'LANGUAGE');
+    const nameIdx = header.findIndex(h => h === 'NAME');
 
     const candidatesNotified: string[] = [];
 
@@ -272,15 +266,12 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-    const colConfirmed = header.findIndex(h => this.normalise(h) === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => {
-      const n = this.normalise(h);
-      return n === 'REMINDER' || n === 'REMINDERSENT';
-    });
-    const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-    const colLang = header.findIndex(h => { const n=this.normalise(h); return n==='LANG' || n==='LANGUAGE'; });
-    const nameIdx = header.findIndex(h => this.normalise(h) === 'NAME');
+    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
+    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colUserId = header.findIndex(h => h === 'user id');
+    const colLang = header.findIndex(h => h === 'LANGUAGE');
+    const nameIdx = header.findIndex(h => h === 'NAME');
 
     const candidatesNotified: string[] = [];
 
@@ -349,14 +340,11 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-    const colConfirmed = header.findIndex(h => this.normalise(h) === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => {
-      const n = this.normalise(h);
-      return n === 'REMINDER' || n === 'REMINDERSENT';
-    });
-    const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-    const nameIdx = header.findIndex(h => this.normalise(h) === 'NAME');
+    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
+    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colUserId = header.findIndex(h => h === 'user id');
+    const nameIdx = header.findIndex(h => h === 'NAME');
 
     const noResponseCandidates: string[] = [];
 
@@ -438,37 +426,32 @@ export class ReminderService {
   }
 
   // Helper method to get user's language from Google Sheets
-  private async getUserLanguage(userId: number): Promise<'en' | 'gr'> {
+  private async getUserLanguage(userId: number): Promise<'gr' | 'en'> {
     try {
       const header = await this.sheets.getHeaderRow();
       const rowsRaw = await this.sheets.getRows('A3:Z1000');
       if (!rowsRaw || !rowsRaw.length) return 'en';
-      
       const rows = rowsRaw as string[][];
-      
+
       // Column B for user ID, find language column
       const userIdCol = 1; // Column B (0-indexed = 1)
-      const langCol = header.findIndex(h => {
-        const norm = h.toUpperCase().replace(/\s|_/g, '');
-        return norm === 'LANG' || norm === 'LANGUAGE';
-      });
+      const langCol = header.findIndex(h => h === 'LANGUAGE');
       
       if (langCol === -1) return 'en';
       
+      // Find the row with this user ID
       for (const row of rows) {
-        if (!row[userIdCol]) continue;
-        
-        const rowUserId = parseInt(row[userIdCol] || '', 10);
+        const rowUserId = parseInt(row[userIdCol] || '0', 10);
         if (rowUserId === userId) {
-          const langVal = (row[langCol] || '').toLowerCase();
-          return langVal.startsWith('gr') ? 'gr' : 'en';
+          const lang = (row[langCol] || '').toLowerCase();
+          return lang.startsWith('gr') ? 'gr' : 'en';
         }
       }
       
-      return 'en';
+      return 'en'; // Default to English if user not found
     } catch (error) {
       console.error('[ReminderService] Error getting user language:', error);
-      return 'en';
+      return 'en'; // Default to English on error
     }
   }
 
@@ -486,12 +469,12 @@ export class ReminderService {
       }
 
       const rows = rowsRaw as string[][];
-      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
-      const colCandidateName = header.findIndex(h => this.normalise(h) === 'NAME');
-      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
-      const colScheduledFor = header.findIndex(h => this.normalise(h) === 'SCHEDULEDFOR');
+      const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
+      const colCandidateName = header.findIndex(h => h === 'NAME');
+      const colUserId = header.findIndex(h => h === 'user id');
+      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
 
-      if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colScheduledFor === -1) {
+      if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colReminderSent === -1) {
         console.log('[ReminderService] Required columns not found for restoring pending reminders.');
         return;
       }
@@ -500,18 +483,34 @@ export class ReminderService {
         const courseDate = (row[colCourseDate] || '').trim();
         const candidateName = (row[colCandidateName] || '').trim();
         const userIdStr = (row[colUserId] || '').trim();
-        const scheduledForStr = (row[colScheduledFor] || '').trim();
+        const reminderSent = (row[colReminderSent] || '').trim();
 
-        if (!courseDate || !candidateName || !userIdStr || !scheduledForStr) {
+        if (!courseDate || !candidateName || !userIdStr) {
           console.warn(`[ReminderService] Skipping incomplete reminder row: ${row}`);
           continue;
         }
 
-        const userId = parseInt(userIdStr, 10);
-        const scheduledFor = new Date(scheduledForStr);
+        // Only restore reminders that are marked as PENDING
+        if (reminderSent !== 'PENDING') {
+          continue;
+        }
 
-        if (isNaN(userId) || isNaN(scheduledFor.getTime())) {
-          console.warn(`[ReminderService] Skipping invalid reminder row: ${row}`);
+        const userId = parseInt(userIdStr, 10);
+        if (isNaN(userId)) {
+          console.warn(`[ReminderService] Skipping invalid user ID: ${userIdStr}`);
+          continue;
+        }
+
+        // Parse the course date to create a scheduledFor date
+        let scheduledFor: Date;
+        try {
+          scheduledFor = new Date(courseDate + 'T00:00:00');
+          if (isNaN(scheduledFor.getTime())) {
+            console.warn(`[ReminderService] Skipping invalid course date: ${courseDate}`);
+            continue;
+          }
+        } catch (error) {
+          console.warn(`[ReminderService] Skipping invalid course date: ${courseDate}`, error);
           continue;
         }
 
@@ -549,34 +548,34 @@ export class ReminderService {
 
       console.log(`🔍 [ReminderService] ===== COLUMN MAPPING DEBUG =====`);
       
-      // Find required columns using existing sheet structure
-      const colCourseDate = header.findIndex(h => this.normalise(h) === 'COURSEDATE');
+      // Find required columns using exact names from your sheet structure
+      const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
       console.log(`🔍 [ReminderService] COURSE DATE column search:`);
-      console.log(`   - Looking for normalised: 'COURSEDATE'`);
+      console.log(`   - Looking for exact: 'COURSE DATE'`);
       console.log(`   - Found at index: ${colCourseDate}`);
       console.log(`   - Header value at that index: '${header[colCourseDate]}'`);
       
-      const colCandidateName = header.findIndex(h => this.normalise(h) === 'NAME');
+      const colCandidateName = header.findIndex(h => h === 'NAME');
       console.log(`🔍 [ReminderService] NAME column search:`);
-      console.log(`   - Looking for normalised: 'NAME'`);
+      console.log(`   - Looking for exact: 'NAME'`);
       console.log(`   - Found at index: ${colCandidateName}`);
       console.log(`   - Header value at that index: '${header[colCandidateName]}'`);
       
-      const colUserId = header.findIndex(h => this.normalise(h) === 'USERID');
+      const colUserId = header.findIndex(h => h === 'user id');
       console.log(`🔍 [ReminderService] user id column search:`);
-      console.log(`   - Looking for normalised: 'USERID'`);
+      console.log(`   - Looking for exact: 'user id'`);
       console.log(`   - Found at index: ${colUserId}`);
       console.log(`   - Header value at that index: '${header[colUserId]}'`);
       
-      const colReminderSent = header.findIndex(h => this.normalise(h) === 'REMINDERSENT');
+      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
       console.log(`🔍 [ReminderService] REMINDERSENT column search:`);
-      console.log(`   - Looking for normalised: 'REMINDERSENT'`);
+      console.log(`   - Looking for exact: 'REMINDERSENT'`);
       console.log(`   - Found at index: ${colReminderSent}`);
       console.log(`   - Header value at that index: '${header[colReminderSent]}'`);
       
-      const colStatus = header.findIndex(h => this.normalise(h) === 'STATUS');
+      const colStatus = header.findIndex(h => h === 'STATUS');
       console.log(`🔍 [ReminderService] STATUS column search:`);
-      console.log(`   - Looking for normalised: 'STATUS'`);
+      console.log(`   - Looking for exact: 'STATUS'`);
       console.log(`   - Found at index: ${colStatus}`);
       console.log(`   - Header value at that index: '${header[colStatus]}'`);
 

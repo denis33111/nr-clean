@@ -254,9 +254,20 @@ export class CandidateStep1Flow {
 
       // Handle edit mode separately
       if (session.editingKey) {
+        const editingKey = session.editingKey;
+        const q = QUESTIONS[session.lang].find(question => question.key === editingKey);
+        
+        // Clear editing state
         delete session.editingKey;
         session.reviewing = true;
+        
+        // Send confirmation and return to review
+        const confirmMsg = session.lang === 'en'
+          ? `✅ Updated: ${q?.text || editingKey}\n\nReturning to review...`
+          : `✅ Ενημερώθηκε: ${q?.text || editingKey}\n\nΕπιστροφή στην αναθεώρηση...`;
+        
         await this.bot.answerCallbackQuery(query.id);
+        await this.bot.sendMessage(query.message!.chat.id, confirmMsg);
         await this.sendReview(userId, query.message!.chat.id);
         return;
       }
@@ -284,6 +295,15 @@ export class CandidateStep1Flow {
       const key = query.data.replace('review_edit_', '');
       const session = this.sessions.get(userId);
       if (!session) return;
+      
+      console.log(`[CandidateStep1Flow] User ${userId} wants to edit: ${key}`);
+      console.log(`[CandidateStep1Flow] Current session state:`, {
+        editingKey: session.editingKey,
+        reviewing: session.reviewing,
+        step: session.step,
+        answers: session.answers
+      });
+      
       session.editingKey = key;
       session.reviewing = false;
       await this.bot.answerCallbackQuery(query.id);
@@ -631,11 +651,32 @@ export class CandidateStep1Flow {
     const session = this.sessions.get(userId);
     if (!session) return;
 
+    console.log(`[CandidateStep1Flow] askEdit called for user ${userId}, key: ${key}`);
+    console.log(`[CandidateStep1Flow] Session state in askEdit:`, {
+      editingKey: session.editingKey,
+      reviewing: session.reviewing,
+      step: session.step
+    });
+
     const q = QUESTIONS[session.lang].find(question => question.key === key);
-    if (!q) return;
+    if (!q) {
+      console.log(`[CandidateStep1Flow] Question not found for key: ${key}`);
+      return;
+    }
+
+    // Set the editing state properly
+    session.editingKey = key;
+    session.reviewing = false;
+    
+    // Send the question with proper instructions
+    const editInstruction = session.lang === 'en' 
+      ? `✏️ Editing: ${q.text}`
+      : `✏️ Επεξεργασία: ${q.text}`;
+
+    console.log(`[CandidateStep1Flow] Sending edit question: "${editInstruction}"`);
 
     if (q.options) {
-      await this.bot.sendMessage(chatId, q.text, {
+      await this.bot.sendMessage(chatId, editInstruction, {
         reply_markup: {
           inline_keyboard: [
             ...q.options.map(option => [
@@ -645,20 +686,40 @@ export class CandidateStep1Flow {
         }
       });
     } else {
-      await this.bot.sendMessage(chatId, q.text);
+      await this.bot.sendMessage(chatId, editInstruction);
     }
   }
 
   private async handleEditResponse(msg: TelegramBot.Message): Promise<void> {
     const userId = msg.from!.id;
-    const session = this.sessions.get(userId)!;
-    const currentQ = QUESTIONS[session.lang][session.step];
+    const session = this.sessions.get(userId);
+    if (!session || !session.editingKey) return;
     
-    if (!currentQ) return;
+    console.log(`[CandidateStep1Flow] handleEditResponse called for user ${userId}, editing key: ${session.editingKey}`);
+    console.log(`[CandidateStep1Flow] User response: "${msg.text}"`);
     
-    session.answers[currentQ.key] = msg.text!.trim();
+    const editingKey = session.editingKey;
+    const q = QUESTIONS[session.lang].find(question => question.key === editingKey);
+    
+    if (!q) {
+      console.log(`[CandidateStep1Flow] Question not found for editing key: ${editingKey}`);
+      return;
+    }
+    
+    // Update the answer
+    session.answers[editingKey] = msg.text!.trim();
+    console.log(`[CandidateStep1Flow] Updated answer for ${editingKey}: "${session.answers[editingKey]}"`);
+    
+    // Clear editing state and return to review
     delete session.editingKey;
     session.reviewing = true;
+    
+    // Send confirmation and return to review
+    const confirmMsg = session.lang === 'en'
+      ? `✅ Updated: ${q.text}\n\nReturning to review...`
+      : `✅ Ενημερώθηκε: ${q.text}\n\nΕπιστροφή στην αναθεώρηση...`;
+    
+    await this.bot.sendMessage(msg.chat.id, confirmMsg);
     await this.sendReview(userId, msg.chat.id);
   }
 
