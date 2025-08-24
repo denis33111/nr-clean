@@ -17,19 +17,19 @@ export class ReminderService {
     // Restore pending reminders from Google Sheets on startup
     this.restorePendingReminders().catch(console.error);
     
-    // Single daily scan at 10:00 AM server time for all course reminders
-    cron.schedule('0 10 * * *', () => {
-      console.log('[ReminderService] Running daily 10:00 AM course reminder check');
+    // Single daily scan at 7:00 AM server time for all course reminders (10:00 AM local time)
+    cron.schedule('0 7 * * *', () => {
+      console.log('[ReminderService] Running daily 7:00 AM server time course reminder check (10:00 AM local time)');
       this.checkMainSheetForTomorrowCourseReminders().catch(console.error);
     });
     
-    console.log('🔍 [ReminderService] Daily 10:00 AM server time cron job scheduled successfully');
-    console.log('🔍 [ReminderService] Cron pattern: 0 10 * * * (10:00 AM server time)');
+    console.log('🔍 [ReminderService] Daily 7:00 AM server time cron job scheduled successfully');
+    console.log('🔍 [ReminderService] Cron pattern: 0 7 * * * (7:00 AM server time = 10:00 AM local time)');
     console.log('🔍 [ReminderService] Will check for candidates with courses tomorrow and send reminders');
     
-    // Run no-response check at 18:00 (6 PM) every day
-    cron.schedule('0 18 * * *', () => {
-      console.log('[ReminderService] Running no-response check at 6:00 PM');
+    // Run no-response check at 15:00 (3 PM) server time every day (6:00 PM local time)
+    cron.schedule('0 15 * * *', () => {
+      console.log('[ReminderService] Running no-response check at 3:00 PM server time (6:00 PM local time)');
       this.checkNoResponses().catch(console.error);
     });
     
@@ -687,12 +687,12 @@ export class ReminderService {
       console.log('🔍 [ReminderService] Step 3: Reading main sheet header...');
       
       // Read main sheet to find candidates with course date = tomorrow
-      const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
+      const header = await this.sheets.getHeaderRow("'ewrest'!A2:Z2");
       console.log('🔍 [ReminderService] Step 4: Header row retrieved:');
       console.log(`   - Header columns: ${header.join(', ')}`);
       
       console.log('🔍 [ReminderService] Step 5: Reading main sheet data rows...');
-      const rowsRaw = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
+      const rowsRaw = await this.sheets.getRows("'ewrest'!A3:Z1000");
       
       if (!rowsRaw || !rowsRaw.length) {
         console.log('❌ [ReminderService] ERROR: No data found in main sheet');
@@ -763,9 +763,9 @@ export class ReminderService {
           continue;
         }
         
-        // Skip if status is not WAITING (candidate already confirmed or rejected)
-        if (status && status !== 'WAITING') {
-          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - status is "${status}" (not WAITING)`);
+        // Skip if status is REJECTED (candidate was rejected)
+        if (status && status === 'REJECTED') {
+          console.log(`🔍 [ReminderService] Row ${i + 3}: Skipping - status is "${status}" (REJECTED)`);
           candidatesSkipped++;
           continue;
         }
@@ -833,7 +833,7 @@ export class ReminderService {
               const rowNum = i + 3; // data starts at row 3
               if (colReminderSent !== -1) {
                 console.log(`🔍 [ReminderService] Row ${i + 3}: Updating REMINDERSENT column to YES...`);
-                await this.sheets.updateCell(`'Φύλλο1'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
+                await this.sheets.updateCell(`'ewrest'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
                 console.log(`✅ [ReminderService] Row ${i + 3}: REMINDERSENT updated to YES for ${candidateName}`);
               } else {
                 console.log(`⚠️ [ReminderService] Row ${i + 3}: REMINDERSENT column not found, cannot update`);
