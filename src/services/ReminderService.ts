@@ -97,6 +97,20 @@ export class ReminderService {
     console.log(`[ReminderService] Reminder will be processed during daily 10:00 AM scan`);
   }
 
+  // 🧪 TEST METHOD: Run reminder check immediately for testing
+  public async testReminderService(): Promise<void> {
+    console.log('🧪 [ReminderService] ===== TESTING REMINDER SERVICE =====');
+    console.log('🧪 [ReminderService] This will test the Google Sheets integration NOW');
+    
+    try {
+      await this.checkMainSheetForTomorrowCourseReminders();
+      console.log('✅ [ReminderService] TEST SUCCESSFUL - Google Sheets integration is working!');
+    } catch (error) {
+      console.error('❌ [ReminderService] TEST FAILED - Google Sheets integration has issues:', error);
+      throw error;
+    }
+  }
+
 
 
 
