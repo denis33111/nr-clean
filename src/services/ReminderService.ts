@@ -687,12 +687,12 @@ export class ReminderService {
       console.log('🔍 [ReminderService] Step 3: Reading main sheet header...');
       
       // Read main sheet to find candidates with course date = tomorrow
-      const header = await this.sheets.getHeaderRow("'ewrest'!A2:Z2");
+      const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
       console.log('🔍 [ReminderService] Step 4: Header row retrieved:');
       console.log(`   - Header columns: ${header.join(', ')}`);
       
       console.log('🔍 [ReminderService] Step 5: Reading main sheet data rows...');
-      const rowsRaw = await this.sheets.getRows("'ewrest'!A3:Z1000");
+      const rowsRaw = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
       
       if (!rowsRaw || !rowsRaw.length) {
         console.log('❌ [ReminderService] ERROR: No data found in main sheet');
@@ -833,7 +833,7 @@ export class ReminderService {
               const rowNum = i + 3; // data starts at row 3
               if (colReminderSent !== -1) {
                 console.log(`🔍 [ReminderService] Row ${i + 3}: Updating REMINDERSENT column to YES...`);
-                await this.sheets.updateCell(`'ewrest'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
+                await this.sheets.updateCell(`'Φύλλο1'!${String.fromCharCode(65 + colReminderSent)}${rowNum}`, 'YES');
                 console.log(`✅ [ReminderService] Row ${i + 3}: REMINDERSENT updated to YES for ${candidateName}`);
               } else {
                 console.log(`⚠️ [ReminderService] Row ${i + 3}: REMINDERSENT column not found, cannot update`);
