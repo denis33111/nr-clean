@@ -67,55 +67,7 @@ async function main() {
       res.json(status);
     });
 
-    // Manual reminder check endpoint (for testing)
-    app.post('/test-reminders', async (req, res) => {
-      try {
-        if (reminderService) {
-          await reminderService.testReminderService();
-          res.json({ 
-            status: 'success', 
-            message: 'Reminder service test completed successfully!',
-            timestamp: new Date().toISOString()
-          });
-        } else {
-          res.status(500).json({ 
-            status: 'error', 
-            message: 'Reminder service not initialized' 
-          });
-        }
-      } catch (error) {
-        res.status(500).json({ 
-          status: 'error', 
-          message: 'Reminder service test failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    });
 
-    // GET endpoint for easier testing (just visit in browser)
-    app.get('/test-reminders', async (req, res) => {
-      try {
-        if (reminderService) {
-          await reminderService.testReminderService();
-          res.json({ 
-            status: 'success', 
-            message: 'Reminder service test completed successfully!',
-            timestamp: new Date().toISOString()
-          });
-        } else {
-          res.status(500).json({ 
-            status: 'error', 
-            message: 'Reminder service not initialized' 
-          });
-        }
-      } catch (error) {
-        res.status(500).json({ 
-          status: 'error', 
-          message: 'Reminder service test failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    });
     
     // Simple web dashboard
     app.get('/dashboard', (req, res) => {
