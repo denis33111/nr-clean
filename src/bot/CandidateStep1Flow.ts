@@ -381,6 +381,29 @@ export class CandidateStep1Flow {
         ]
       }
     });
+    
+    // Send persistent contact button
+    await this.sendPersistentContactButton(chatId);
+  }
+  
+  // Send persistent contact button to user
+  private async sendPersistentContactButton(chatId: number): Promise<void> {
+    try {
+      const contactKeyboard = {
+        keyboard: [[
+          { text: "📱 Contact @DenisZgl", request_contact: false }
+        ]],
+        resize_keyboard: true,
+        persistent: true,
+        one_time_keyboard: false
+      } as TelegramBot.SendMessageOptions['reply_markup'];
+      
+      await this.bot.sendMessage(chatId, "📱 Need help? Contact me anytime! Tap the button below to open a chat with @DenisZgl", {
+        reply_markup: contactKeyboard
+      });
+    } catch (error) {
+      console.error('[CandidateStep1Flow] Error sending persistent contact button:', error);
+    }
   }
 
   private async askNext(userId: number, chatId: number) {

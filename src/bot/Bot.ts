@@ -15,6 +15,16 @@ export class Bot {
   private messageHandler: MessageHandler;
   private callbackQueryHandler: CallbackQueryHandler;
   private lastUserCommands: Map<number, { command: string; timestamp: number }> = new Map(); // Track last command per user
+  
+  // Persistent contact button keyboard
+  private readonly persistentContactKeyboard = {
+    keyboard: [[
+      { text: "📱 Contact @DenisZgl", request_contact: false }
+    ]],
+    resize_keyboard: true,
+    persistent: true,
+    one_time_keyboard: false
+  } as TelegramBot.SendMessageOptions['reply_markup'];
 
   constructor(database: Database, logger: Logger, sheetsClient?: GoogleSheetsClient) {
     const token = process.env.BOT_TOKEN;
@@ -128,6 +138,22 @@ export class Bot {
     await this.commandHandler.handleCommand(msg);
   }
 
+  // Get the bot instance for other services to use
+  public getBotInstance(): TelegramBot {
+    return this.bot;
+  }
+
+  // Send persistent contact button to user
+  private async sendPersistentContactButton(chatId: number): Promise<void> {
+    try {
+      await this.bot.sendMessage(chatId, "📱 Need help? Contact me anytime! Tap the button below to open a chat with @DenisZgl", {
+        reply_markup: this.persistentContactKeyboard
+      });
+    } catch (error) {
+      console.error('[Bot] Error sending persistent contact button:', error);
+    }
+  }
+
   private async routeMessage(msg: TelegramBot.Message): Promise<void> {
     const userId = msg.from!.id;
     const chatId = msg.chat.id;
@@ -179,6 +205,8 @@ export class Bot {
         try {
           if ((this as any).candidateStep1Flow) {
             await (this as any).candidateStep1Flow.handleStartCommand(msg);
+            // Send persistent contact button after starting the flow
+            await this.sendPersistentContactButton(chatId);
             return;
           } else {
             console.error('[DEBUG] CandidateStep1Flow not initialized');

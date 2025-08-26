@@ -244,10 +244,10 @@ async function main() {
     console.log('[DEBUG] CandidateStep1Flow initialized successfully');
 
     // Initialize ReminderService ONCE
-    const reminderService = new ReminderService((bot as any).bot, sheetsClient);
+    const reminderService = new ReminderService(bot.getBotInstance(), sheetsClient);
 
     // Initialize AdminStep2Flow ONCE
-    const adminStep2Flow = new AdminStep2Flow((bot as any).bot, sheetsClient, database);
+    const adminStep2Flow = new AdminStep2Flow(bot.getBotInstance(), sheetsClient, database);
     adminStep2Flow.setReminderService(reminderService);
     adminStep2Flow.setupHandlers(); // Set up handlers after reminder service is set
 

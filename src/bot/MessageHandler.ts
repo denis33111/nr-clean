@@ -587,9 +587,9 @@ Is there something specific about the hiring process you need help with?
     
     // Get user's language (already got it above)
     
-    // Define office location (you can adjust these coordinates)
-    const officeLat = 37.909170; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
-    const officeLng = 23.873056; // TEMPORARY TESTING coordinates - REMEMBER TO REVERT!
+    // Define office location coordinates
+    const officeLat = 37.922192; // New office coordinates
+    const officeLng = 23.932821; // New office coordinates
     const maxDistance = 0.5; // 500 meters radius
     
     // Calculate distance between user and office
@@ -884,6 +884,29 @@ Is there something specific about the hiring process you need help with?
     };
     
     await this.bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
+    
+    // Send persistent contact button
+    await this.sendPersistentContactButton(chatId);
+  }
+  
+  // Send persistent contact button to user
+  private async sendPersistentContactButton(chatId: number): Promise<void> {
+    try {
+      const contactKeyboard = {
+        keyboard: [[
+          { text: "📱 Contact @DenisZgl", request_contact: false }
+        ]],
+        resize_keyboard: true,
+        persistent: true,
+        one_time_keyboard: false
+      } as TelegramBot.SendMessageOptions['reply_markup'];
+      
+      await this.bot.sendMessage(chatId, "📱 Need help? Contact me anytime! Tap the button below to open a chat with @DenisZgl", {
+        reply_markup: contactKeyboard
+      });
+    } catch (error) {
+      console.error('[MessageHandler] Error sending persistent contact button:', error);
+    }
   }
 
   // Check if user has ongoing check-out session
