@@ -91,6 +91,9 @@ export class CommandHandler {
         case '/makeadmin':
           await this.handleMakeAdmin(msg, args);
           break;
+        case '/test-reminders':
+          await this.handleTestReminders(msg);
+          break;
         default:
           // Allow other flows to handle step2-related commands
           if (command === '/pending2' || command.startsWith('/step2_')) {
@@ -187,6 +190,7 @@ This is the admin group where you can:
 • /settings - Manage your preferences
 • /stats - View your usage statistics
 • /admin - Admin panel (admin only)
+• /test-reminders - Test reminder system (working users only)
 
 💬 Regular Messages:
 • Send any text message to interact with the bot
@@ -598,6 +602,47 @@ Last Active: ${user.lastActive ? new Date(user.lastActive).toLocaleString() : 'N
     } else {
       await this.bot.sendMessage(chatId, `❌ Admins already exist. Use /addadmin in a group chat instead.`);
       return;
+    }
+  }
+
+  // Handle test reminders command
+  private async handleTestReminders(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userId = msg.from!.id;
+    
+    try {
+      // Check if user is admin or working user
+      const userStatus = await this.messageHandler.getUserStatus(userId);
+      const isWorkingUser = userStatus && userStatus.status.toLowerCase() === 'working';
+      
+      if (!isWorkingUser) {
+        await this.bot.sendMessage(chatId, '❌ Only working users can test reminders.');
+        return;
+      }
+      
+      await this.bot.sendMessage(chatId, '🧪 Testing reminder system... This will trigger the daily reminder check immediately.');
+      
+      // Import and trigger the reminder service
+      try {
+        // Get the reminder service from the bot instance
+        const { ReminderService } = await import('../services/ReminderService');
+        
+        // Create a temporary reminder service instance to test
+        if (this.sheets) {
+          const reminderService = new ReminderService(this.bot, this.sheets);
+          await reminderService.triggerReminderCheck();
+          await this.bot.sendMessage(chatId, '✅ Reminder test completed! Check the logs and your Telegram for the reminder message.');
+        } else {
+          await this.bot.sendMessage(chatId, '❌ Google Sheets not available for reminder testing.');
+        }
+      } catch (error) {
+        console.error('[CommandHandler] Error testing reminders:', error);
+        await this.bot.sendMessage(chatId, '❌ Error testing reminders. Check the logs for details.');
+      }
+      
+    } catch (error) {
+      console.error('[CommandHandler] Error in handleTestReminders:', error);
+      await this.bot.sendMessage(chatId, '❌ Error processing test reminders command.');
     }
   }
 } 
