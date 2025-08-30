@@ -1,0 +1,53 @@
+{
+  "name": "newrest-worker-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for worker registration and check-in/out system",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "nodemon --exec ts-node src/index.ts",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "worker",
+    "registration",
+    "checkin",
+    "checkout"
+  ],
+  "author": "Newrest Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "googleapis": "^121.0.0",
+    "node-cron": "^4.2.1",
+    "node-telegram-bot-api": "^0.64.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.15",
+    "@types/express": "^4.17.20",
+    "@types/jest": "^29.5.6",
+    "@types/node": "^20.8.0",
+    "@types/node-telegram-bot-api": "^0.64.0",
+    "@typescript-eslint/eslint-plugin": "^6.8.0",
+    "@typescript-eslint/parser": "^6.8.0",
+    "eslint": "^8.51.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.0.3",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
