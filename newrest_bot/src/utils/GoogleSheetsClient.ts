@@ -16,12 +16,23 @@ export class GoogleSheetsClient {
       // Try to get credentials from environment variable first
       let credentials: any;
       
+      // DEBUG: Log what we're receiving
+      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON exists:', !!process.env['GOOGLE_CREDENTIALS_JSON']);
+      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON length:', process.env['GOOGLE_CREDENTIALS_JSON']?.length || 0);
+      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON first 100 chars:', process.env['GOOGLE_CREDENTIALS_JSON']?.substring(0, 100) || 'NONE');
+      
       if (process.env['GOOGLE_CREDENTIALS_JSON']) {
         // Use credentials from environment variable
         try {
           credentials = JSON.parse(process.env['GOOGLE_CREDENTIALS_JSON']);
+          this.logger.info('DEBUG: Successfully parsed credentials JSON');
+          this.logger.info('DEBUG: Credentials type:', credentials.type);
+          this.logger.info('DEBUG: Credentials client_email:', credentials.client_email);
+          this.logger.info('DEBUG: Credentials project_id:', credentials.project_id);
           this.logger.info('Using Google credentials from environment variable');
         } catch (parseError) {
+          this.logger.error('DEBUG: JSON parse error details:', parseError);
+          this.logger.error('DEBUG: Raw GOOGLE_CREDENTIALS_JSON:', process.env['GOOGLE_CREDENTIALS_JSON']);
           this.logger.error('Failed to parse GOOGLE_CREDENTIALS_JSON:', parseError);
           throw new Error('Invalid GOOGLE_CREDENTIALS_JSON format');
         }
@@ -43,6 +54,7 @@ export class GoogleSheetsClient {
       }
       
       // Use credentials object directly
+      this.logger.info('DEBUG: Creating GoogleAuth with credentials object');
       const auth = new google.auth.GoogleAuth({
         credentials: credentials,
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
