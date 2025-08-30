@@ -3,8 +3,6 @@ services:
     name: newrest-worker-bot
     env: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: "20"
@@ -20,5 +18,9 @@ services:
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_PATH
         sync: false
+      - key: FORCE_REBUILD
+        value: "true"
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
