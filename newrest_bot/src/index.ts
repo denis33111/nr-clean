@@ -27,7 +27,7 @@ async function main() {
     if (webhookUrl) {
       // Production: Set up Express server for webhook
       const app = express();
-      const PORT = process.env['PORT'] || 3000;
+      const PORT = process.env['PORT'] || 10000;
       
       // Middleware
       app.use(cors());
@@ -50,9 +50,9 @@ async function main() {
         }
       });
       
-      // Start Express server
-      app.listen(PORT, () => {
-        logger.info(`Express server started on port ${PORT}`);
+      // Start Express server - MUST bind to 0.0.0.0 for Render
+      app.listen(PORT, '0.0.0.0', () => {
+        logger.info(`Express server started on port ${PORT} (bound to 0.0.0.0)`);
       });
       
       // Start bot with webhook
