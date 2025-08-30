@@ -275,9 +275,10 @@ export class Bot {
     await this.bot.sendMessage(chatId, contactMessage, { reply_markup: keyboard });
   }
 
-
-
-
+  private handleCallbackQuery(callbackQuery: any): void {
+    // For now, just log callback queries - we can expand this later
+    this.logger.info('Callback query received:', callbackQuery);
+  }
 
   async start(): Promise<void> {
     try {
@@ -311,12 +312,32 @@ export class Bot {
   // Method to handle webhook updates from Express
   handleWebhookUpdate(update: any): void {
     try {
+      // Handle all types of updates
       if (update.message) {
-        // Handle the message directly instead of emitting
-        this.handleStartCommand(update.message);
+        // Handle text messages and commands
+        this.handleMessage(update.message);
+      } else if (update.callback_query) {
+        // Handle button clicks and callback queries
+        this.handleCallbackQuery(update.callback_query);
       }
     } catch (error) {
       this.logger.error('Error handling webhook update:', error);
+    }
+  }
+
+  private handleMessage(message: any): void {
+    // Handle /start command
+    if (message.text === '/start') {
+      this.handleStartCommand(message);
+    }
+    // Handle other commands and messages
+    else if (message.text) {
+      // For now, just log other messages - we can expand this later
+      this.logger.info('Message received:', message.text);
+    }
+    // Handle location messages
+    else if (message.location) {
+      this.handleLocationMessage(message);
     }
   }
 
