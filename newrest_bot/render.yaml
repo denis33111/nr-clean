@@ -17,7 +17,7 @@ services:
       - key: GOOGLE_SHEETS_ID
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_PATH
-        sync: false
+        value: /etc/secrets/newrest-465515-64b89bbce530.json
       - key: FORCE_REBUILD
         value: "true"
     buildCommand: npm install && npm run build
