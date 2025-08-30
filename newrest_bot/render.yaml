@@ -3,12 +3,11 @@ services:
     name: newrest-worker-bot
     env: node
     plan: free
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: NODE_ENV
         value: production
       - key: BOT_TOKEN

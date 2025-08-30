@@ -23,7 +23,7 @@
   "author": "Newrest Team",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x"
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",
