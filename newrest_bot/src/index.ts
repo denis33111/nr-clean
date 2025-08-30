@@ -27,7 +27,7 @@ async function main() {
     if (webhookUrl) {
       // Production: Set up Express server for webhook
       const app = express();
-      const PORT = process.env['PORT'] || 10000;
+      const PORT = parseInt(process.env['PORT'] || '10000', 10);
       
       // Middleware
       app.use(cors());
