@@ -18,11 +18,24 @@ export class GoogleSheetsClient {
       
       // DEBUG: Log what we're receiving
       this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON exists:', !!process.env['GOOGLE_CREDENTIALS_JSON']);
-      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON length:', process.env['GOOGLE_CREDENTIALS_JSON']?.length || 0);
-      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON first 100 chars:', process.env['GOOGLE_CREDENTIALS_JSON']?.substring(0, 100) || 'NONE');
+      this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_PATH exists:', !!process.env['GOOGLE_SERVICE_ACCOUNT_PATH']);
+      this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_PATH value:', process.env['GOOGLE_SERVICE_ACCOUNT_PATH'] || 'NOT SET');
       
-      if (process.env['GOOGLE_CREDENTIALS_JSON']) {
-        // Use credentials from environment variable
+      if (process.env['GOOGLE_SERVICE_ACCOUNT_PATH']) {
+        // Use file path method (for Render with uploaded file)
+        const keyFile = process.env['GOOGLE_SERVICE_ACCOUNT_PATH'];
+        this.logger.info('DEBUG: Using Google credentials from file path:', keyFile);
+        
+        const auth = new google.auth.GoogleAuth({
+          keyFile: keyFile,
+          scopes: ['https://www.googleapis.com/auth/spreadsheets']
+        });
+        
+        this.sheets = google.sheets({ version: 'v4', auth });
+        this.logger.info('Google Sheets client initialized successfully with file path method');
+        return;
+      } else if (process.env['GOOGLE_CREDENTIALS_JSON']) {
+        // Fallback to environment variable (for local development)
         try {
           credentials = JSON.parse(process.env['GOOGLE_CREDENTIALS_JSON']);
           this.logger.info('DEBUG: Successfully parsed credentials JSON');
@@ -36,21 +49,8 @@ export class GoogleSheetsClient {
           this.logger.error('Failed to parse GOOGLE_CREDENTIALS_JSON:', parseError);
           throw new Error('Invalid GOOGLE_CREDENTIALS_JSON format');
         }
-      } else if (process.env['GOOGLE_SERVICE_ACCOUNT_PATH']) {
-        // Fallback to file path (for local development)
-        const keyFile = process.env['GOOGLE_SERVICE_ACCOUNT_PATH'];
-        this.logger.info('Using Google credentials from file path');
-        
-        const auth = new google.auth.GoogleAuth({
-          keyFile: keyFile,
-          scopes: ['https://www.googleapis.com/auth/spreadsheets']
-        });
-        
-        this.sheets = google.sheets({ version: 'v4', auth });
-        this.logger.info('Google Sheets client initialized successfully');
-        return;
       } else {
-        throw new Error('Either GOOGLE_CREDENTIALS_JSON or GOOGLE_SERVICE_ACCOUNT_PATH environment variable is required');
+        throw new Error('Either GOOGLE_SERVICE_ACCOUNT_PATH or GOOGLE_CREDENTIALS_JSON environment variable is required');
       }
       
       // Use credentials object directly
@@ -61,7 +61,7 @@ export class GoogleSheetsClient {
       });
 
       this.sheets = google.sheets({ version: 'v4', auth });
-      this.logger.info('Google Sheets client initialized successfully');
+      this.logger.info('Google Sheets client initialized successfully with credentials object method');
     } catch (error) {
       this.logger.error('Failed to initialize Google Sheets client:', error);
       throw error;
