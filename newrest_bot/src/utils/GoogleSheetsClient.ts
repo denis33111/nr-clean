@@ -13,13 +13,38 @@ export class GoogleSheetsClient {
 
   async initialize(): Promise<void> {
     try {
-      const keyFile = process.env['GOOGLE_SERVICE_ACCOUNT_PATH'];
-      if (!keyFile) {
-        throw new Error('GOOGLE_SERVICE_ACCOUNT_PATH environment variable is required');
+      // Try to get credentials from environment variable first
+      let credentials: any;
+      
+      if (process.env['GOOGLE_CREDENTIALS_JSON']) {
+        // Use credentials from environment variable
+        try {
+          credentials = JSON.parse(process.env['GOOGLE_CREDENTIALS_JSON']);
+          this.logger.info('Using Google credentials from environment variable');
+        } catch (parseError) {
+          this.logger.error('Failed to parse GOOGLE_CREDENTIALS_JSON:', parseError);
+          throw new Error('Invalid GOOGLE_CREDENTIALS_JSON format');
+        }
+      } else if (process.env['GOOGLE_SERVICE_ACCOUNT_PATH']) {
+        // Fallback to file path (for local development)
+        const keyFile = process.env['GOOGLE_SERVICE_ACCOUNT_PATH'];
+        this.logger.info('Using Google credentials from file path');
+        
+        const auth = new google.auth.GoogleAuth({
+          keyFile: keyFile,
+          scopes: ['https://www.googleapis.com/auth/spreadsheets']
+        });
+        
+        this.sheets = google.sheets({ version: 'v4', auth });
+        this.logger.info('Google Sheets client initialized successfully');
+        return;
+      } else {
+        throw new Error('Either GOOGLE_CREDENTIALS_JSON or GOOGLE_SERVICE_ACCOUNT_PATH environment variable is required');
       }
       
+      // Use credentials object directly
       const auth = new google.auth.GoogleAuth({
-        keyFile: keyFile,
+        credentials: credentials,
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
       });
 
