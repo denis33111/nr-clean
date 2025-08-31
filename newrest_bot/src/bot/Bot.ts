@@ -164,11 +164,13 @@ export class Bot {
         }
         // Handle check-in/out messages
         else if (msg.text && !msg.text.startsWith('/')) {
-          if (msg.text === '📝 Check-in') {
+          if (msg.text === '✅ Check In') {
             await this.checkInOutFlow.handleCheckIn(msg.chat.id, msg.from!.id);
-          } else if (msg.text === '🚪 Check-out') {
+          } else if (msg.text === '❌ Check Out') {
             await this.checkInOutFlow.handleCheckOut(msg.chat.id, msg.from!.id);
-          } else if (msg.text === '📱 Contact Support') {
+          } else if (msg.text === '📅 Πρόγραμμα') {
+            await this.checkInOutFlow.handleSchedule(msg.chat.id, msg.from!.id);
+          } else if (msg.text === '📱 Επικοινωνία Υποστήριξης') {
             await this.checkInOutFlow.handleContactSupport(msg.chat.id, msg.from!.id);
           }
           // Check if this is an admin message that needs processing

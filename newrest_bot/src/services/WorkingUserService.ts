@@ -88,8 +88,11 @@ export class WorkingUserService {
       const keyboard = {
         inline_keyboard: [
           [
-            { text: '✅ Check-in', callback_data: 'working_checkin' },
-            { text: '❌ Check-out', callback_data: 'working_checkout' }
+            { text: '✅ Check In', callback_data: 'working_checkin' },
+            { text: '❌ Check Out', callback_data: 'working_checkout' }
+          ],
+          [
+            { text: '📅 Πρόγραμμα', callback_data: 'working_schedule' }
           ],
           [
             { text: '📞 Contact', callback_data: 'contact' }
@@ -112,11 +115,11 @@ export class WorkingUserService {
       // Set current action to CHECK_IN
       this.setCurrentUserAction(userId, 'CHECK_IN');
       
-      const message = `📍 Please share your location to complete check-in.\n\nClick the location button below:`;
+      const message = `📍 Για check-in, πατήστε το κουμπί παρακάτω και βεβαιωθείτε ότι είστε στη σωστή ζώνη:`;
       
       const keyboard = {
         keyboard: [
-          [{ text: '📍 Share Location', request_location: true }]
+          [{ text: '📍 Στείλε την τοποθεσία μου', request_location: true }]
         ],
         resize_keyboard: true,
         one_time_keyboard: true
@@ -137,11 +140,11 @@ export class WorkingUserService {
       // Set current action to CHECK_OUT
       this.setCurrentUserAction(userId, 'CHECK_OUT');
       
-      const message = `📍 Please share your location to complete check-out.\n\nClick the location button below:`;
+      const message = `📍 Για check-out, πατήστε το κουμπί παρακάτω και βεβαιωθείτε ότι είστε στη σωστή ζώνη:`;
       
       const keyboard = {
         keyboard: [
-          [{ text: '📍 Share Location', request_location: true }]
+          [{ text: '📍 Στείλε την τοποθεσία μου', request_location: true }]
         ],
         resize_keyboard: true,
         one_time_keyboard: true
@@ -151,6 +154,79 @@ export class WorkingUserService {
       this.logger.info(`[WorkingUserService] Check-out location request sent to user ${userId}`);
     } catch (error) {
       this.logger.error('[WorkingUserService] Error handling check-out request:', error);
+    }
+  }
+
+  /**
+   * Handle schedule request
+   */
+  public async handleScheduleRequest(userId: number): Promise<void> {
+    try {
+      const userName = await this.getWorkingUserName(userId);
+      if (!userName) {
+        await this.bot.sendMessage(userId, '❌ Σφάλμα: Ο χρήστης δεν βρέθηκε στους εργαζόμενους.');
+        return;
+      }
+
+      // Get today's date
+      const today = new Date();
+      const monthYear = `${today.getFullYear()}/${today.getMonth() + 1}`;
+      const day = today.getDate();
+      
+      try {
+        // Try to get schedule data from the monthly sheet
+        const scheduleData = await this.getScheduleData(userName, monthYear, day);
+        
+        if (scheduleData) {
+          const message = `📅 Πρόγραμμα για ${userName} - ${today.toLocaleDateString('el-GR')}\n\n${scheduleData}`;
+          await this.bot.sendMessage(userId, message);
+        } else {
+          const message = `📅 Δεν υπάρχει πρόγραμμα για σήμερα (${today.toLocaleDateString('el-GR')})`;
+          await this.bot.sendMessage(userId, message);
+        }
+      } catch (error) {
+        this.logger.error('[WorkingUserService] Error getting schedule data:', error);
+        await this.bot.sendMessage(userId, '❌ Σφάλμα κατά την ανάκτηση του προγράμματος.');
+      }
+      
+      this.logger.info(`[WorkingUserService] Schedule request handled for user ${userId}`);
+    } catch (error) {
+      this.logger.error('[WorkingUserService] Error handling schedule request:', error);
+      await this.bot.sendMessage(userId, '❌ Σφάλμα κατά την επεξεργασία της αίτησης προγράμματος.');
+    }
+  }
+
+  /**
+   * Get schedule data for a specific user and date
+   */
+  private async getScheduleData(userName: string, monthYear: string, day: number): Promise<string | null> {
+    try {
+      const sheetName = monthYear;
+      
+      // Find the user row in the monthly sheet
+      const userRow = await this.findUserRowInMonthlySheet(userName, sheetName);
+      if (userRow === -1) {
+        return null; // User not found in this month's sheet
+      }
+      
+      // Find the day column
+      const dayCol = await this.findDayColumnInMonthlySheet(day, sheetName);
+      if (dayCol === '') {
+        return null; // Day column not found
+      }
+      
+      // Get the schedule data for this user and day
+      const range = `${sheetName}!${dayCol}${userRow}`;
+      const scheduleData = await this.sheets.getCellValue(range);
+      
+      if (scheduleData && scheduleData.trim() !== '') {
+        return scheduleData;
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.error('[WorkingUserService] Error getting schedule data:', error);
+      throw error;
     }
   }
 
@@ -304,12 +380,15 @@ export class WorkingUserService {
    */
   private async showCheckOutOption(userId: number): Promise<void> {
     try {
-      const message = `✅ Check-in completed! Now you can check-out when you finish work.`;
+      const message = `✅ Check-in ολοκληρώθηκε! Τώρα μπορείτε να κάνετε check-out όταν τελειώσετε τη δουλειά.`;
       
       const keyboard = {
         inline_keyboard: [
           [
-            { text: '❌ Check-out', callback_data: 'working_checkout' }
+            { text: '❌ Check Out', callback_data: 'working_checkout' }
+          ],
+          [
+            { text: '📅 Πρόγραμμα', callback_data: 'working_schedule' }
           ],
           [
             { text: '📞 Contact', callback_data: 'contact' }
@@ -329,13 +408,16 @@ export class WorkingUserService {
    */
   private async showCheckInOption(userId: number): Promise<void> {
     try {
-      const message = `✅ Check-out completed! You can check-in again tomorrow.`;
+      const message = `✅ Check-out ολοκληρώθηκε! Μπορείτε να κάνετε check-in ξανά αύριο.`;
       
       const keyboard = {
         inline_keyboard: [
           [
-            { text: '✅ Check-in', callback_data: 'working_checkin' },
-            { text: '❌ Check-out', callback_data: 'working_checkout' }
+            { text: '✅ Check In', callback_data: 'working_checkin' },
+            { text: '❌ Check Out', callback_data: 'working_checkout' }
+          ],
+          [
+            { text: '📅 Πρόγραμμα', callback_data: 'working_schedule' }
           ],
           [
             { text: '📞 Contact', callback_data: 'contact' }
@@ -442,6 +524,9 @@ export class WorkingUserService {
           break;
         case 'working_checkout':
           await this.handleCheckOutRequest(userId);
+          break;
+        case 'working_schedule':
+          await this.handleScheduleRequest(userId);
           break;
         case 'contact':
           // This will be handled by the main bot's contact flow
