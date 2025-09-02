@@ -30,7 +30,7 @@ export class GoogleSheetsClient {
         credentials = {
           type: 'service_account',
           project_id: 'newrest-465515',
-          private_key_id: '57e8bc3dee7efc0f3f1cee40949ba45a44179c5d',
+          private_key_id: '3b18e53a334d61a9a207b9584f0d367a5d7e250e',
           private_key: process.env['GOOGLE_PRIVATE_KEY'],
           client_email: process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL'],
           client_id: '110694577902197703065',
