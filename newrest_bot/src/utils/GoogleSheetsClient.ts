@@ -13,6 +13,8 @@ export class GoogleSheetsClient {
 
   async initialize(): Promise<void> {
     try {
+      this.logger.info('🚀 [GoogleSheetsClient] initialize() called - starting authentication');
+      
       // Try to get credentials from environment variables
       let credentials: any;
       
