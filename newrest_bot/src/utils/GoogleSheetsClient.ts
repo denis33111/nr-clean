@@ -21,6 +21,7 @@ export class GoogleSheetsClient {
       this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_EMAIL exists:', !!process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL']);
       this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_PATH exists:', !!process.env['GOOGLE_SERVICE_ACCOUNT_PATH']);
       this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON exists:', !!process.env['GOOGLE_CREDENTIALS_JSON']);
+      this.logger.info('DEBUG: All environment variables:', Object.keys(process.env).filter(key => key.includes('GOOGLE')));
       
       if (process.env['GOOGLE_PRIVATE_KEY'] && process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL']) {
         // Use individual environment variables (for Render)
