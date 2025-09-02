@@ -60,6 +60,8 @@ export class Bot {
     // Start the reminder scheduler
     this.reminderService.start();
     
+    // Start session cleanup scheduler to prevent memory buildup
+    this.startSessionCleanup();
 
   }
 
@@ -355,5 +357,20 @@ export class Bot {
 
   public getWorkingUserService(): WorkingUserService {
     return this.workingUserService;
+  }
+
+  /**
+   * Start automatic session cleanup to prevent memory buildup
+   */
+  private startSessionCleanup(): void {
+    // Clean up old sessions every 30 minutes
+    setInterval(() => {
+      try {
+        this.registrationFlow.cleanupOldSessions(24); // 24 hours max age
+        this.logger.info('Session cleanup completed');
+      } catch (error) {
+        this.logger.error('Error during session cleanup:', error);
+      }
+    }, 30 * 60 * 1000); // Every 30 minutes
   }
 }

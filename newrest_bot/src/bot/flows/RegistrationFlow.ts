@@ -36,6 +36,8 @@ export class RegistrationFlow {
   private logger: Logger;
   private sessionManager: SessionManager;
   private adminNotificationService: AdminNotificationService;
+  private callbackQueryHandler: (callbackQuery: any) => Promise<void>;
+  private messageHandler: (msg: any) => Promise<void>;
 
   constructor(bot: TelegramBot, sheetsClient: GoogleSheetsClient, logger: Logger, adminNotificationService: AdminNotificationService) {
     this.bot = bot;
@@ -48,8 +50,8 @@ export class RegistrationFlow {
   }
 
   private setupCallbacks(): void {
-    // Handle language selection
-    this.bot.on('callback_query', async (callbackQuery) => {
+    // Store handlers so we can remove them later
+    this.callbackQueryHandler = async (callbackQuery) => {
       if (!callbackQuery.data || !callbackQuery.message) return;
       
       const data = callbackQuery.data;
@@ -74,11 +76,12 @@ export class RegistrationFlow {
       } catch (error) {
         this.logger.error(`Error handling callback ${data} for user ${userId}:`, error);
         await this.bot.answerCallbackQuery(callbackQuery.id, { text: 'Error occurred. Please try again.' });
+        // Clean up session on critical errors to prevent user from getting stuck
+        this.sessionManager.removeSession(userId);
       }
-    });
+    };
 
-    // Handle text messages for data input
-    this.bot.on('message', async (msg) => {
+    this.messageHandler = async (msg) => {
       if (!msg.text || msg.text.startsWith('/')) return;
       
       const userId = msg.from?.id;
@@ -94,8 +97,14 @@ export class RegistrationFlow {
       } catch (error) {
         this.logger.error(`Error handling text input for user ${userId}:`, error);
         await this.bot.sendMessage(chatId, 'Error occurred. Please try again.');
+        // Clean up session on critical errors to prevent user from getting stuck
+        this.sessionManager.removeSession(userId);
       }
-    });
+    };
+
+    // Register the handlers
+    this.bot.on('callback_query', this.callbackQueryHandler);
+    this.bot.on('message', this.messageHandler);
   }
 
   async start(chatId: number, userId: number): Promise<void> {
@@ -123,6 +132,8 @@ export class RegistrationFlow {
       this.logger.info(`✅ REGISTRATION FLOW STARTED - User ${userId}: Flow started successfully`);
     } catch (error) {
       this.logger.error(`❌ REGISTRATION FLOW ERROR - User ${userId}: Error starting flow:`, error);
+      // Clean up any partial session on start error
+      this.sessionManager.removeSession(userId);
       await this.bot.sendMessage(chatId, 'Sorry, something went wrong. Please try again later.');
     }
   }
@@ -204,37 +215,9 @@ export class RegistrationFlow {
       this.logger.info(`🚗 DRIVING LICENSE DEBUG - User ${userId}: callback_data="${data}", parsed_key="${key}", parsed_value="${value}"`);
     }
     
-    // Save answer - handle each field specifically
+    // Save answer using centralized method
     this.logger.info(`💾 SAVING ANSWER - User ${userId}: Saving ${key} = "${value}"`);
-    
-    // Handle each field specifically - use exact key matching for consistency
-    if (key === 'NAME') {
-      session.userData.name = value;
-      this.logger.info(`✅ SAVED NAME - User ${userId}: "${value}"`);
-    } else if (key === 'AGE') {
-      session.userData.age = value;
-      this.logger.info(`✅ SAVED AGE - User ${userId}: "${value}"`);
-    } else if (key === 'PHONE') {
-      session.userData.phone = value;
-      this.logger.info(`✅ SAVED PHONE - User ${userId}: "${value}"`);
-    } else if (key === 'EMAIL') {
-      session.userData.email = value;
-      this.logger.info(`✅ SAVED EMAIL - User ${userId}: "${value}"`);
-    } else if (key === 'ADDRESS') {
-      session.userData.address = value;
-      this.logger.info(`✅ SAVED ADDRESS - User ${userId}: "${value}"`);
-    } else if (key === 'TRANSPORT') {
-      session.userData.transport = value as 'MMM' | 'VEHICLE' | 'BOTH';
-      this.logger.info(`✅ SAVED TRANSPORT - User ${userId}: "${value}"`);
-    } else if (key === 'BANK') {
-      session.userData.bank = value as 'EURO_BANK' | 'ALPHA_BANK' | 'PIRAEUS_BANK' | 'NATION_ALBANK';
-      this.logger.info(`✅ SAVED BANK - User ${userId}: "${value}"`);
-    } else if (key === 'DRLICENCE') {
-      session.userData.drLicence = value as 'YES' | 'NO';
-      this.logger.info(`🚗 SAVED DRIVING LICENSE - User ${userId}: "${value}", saved as: "${session.userData.drLicence}"`);
-    } else {
-      this.logger.warn(`⚠️ UNKNOWN FIELD - User ${userId}: Unknown field "${key}" with value "${value}"`);
-    }
+    this.updateUserDataField(session, key, value);
     
     this.logger.info(`📈 STEP INCREMENT - User ${userId}: Step ${session.step} → ${session.step + 1}`);
     session.step++;
@@ -274,23 +257,7 @@ export class RegistrationFlow {
       if (question && !question.options) {
         // Text question - save answer and move to next
         this.logger.info(`💾 SAVING TEXT INPUT - User ${userId}: Question: "${question.key}", Text: "${text.trim()}"`);
-        
-        if (question.key === 'NAME') {
-          session.userData.name = text.trim();
-          this.logger.info(`✅ SAVED NAME TEXT - User ${userId}: "${text.trim()}"`);
-        } else if (question.key === 'AGE') {
-          session.userData.age = text.trim();
-          this.logger.info(`✅ SAVED AGE TEXT - User ${userId}: "${text.trim()}"`);
-        } else if (question.key === 'PHONE') {
-          session.userData.phone = text.trim();
-          this.logger.info(`✅ SAVED PHONE TEXT - User ${userId}: "${text.trim()}"`);
-        } else if (question.key === 'EMAIL') {
-          session.userData.email = text.trim();
-          this.logger.info(`✅ SAVED EMAIL TEXT - User ${userId}: "${text.trim()}"`);
-        } else if (question.key === 'ADDRESS') {
-          session.userData.address = text.trim();
-          this.logger.info(`✅ SAVED ADDRESS TEXT - User ${userId}: "${text.trim()}"`);
-        }
+        this.updateUserDataField(session, question.key, text.trim());
         
         this.logger.info(`📈 TEXT INPUT STEP INCREMENT - User ${userId}: Step ${session.step} → ${session.step + 1}`);
         session.step++;
@@ -507,16 +474,8 @@ export class RegistrationFlow {
     
     if (!q) return;
     
-    // Update the answer - handle each field specifically
-    const keyLower = editingKey.toLowerCase();
-    if (keyLower === 'name') session.userData.name = text.trim();
-    else if (keyLower === 'age') session.userData.age = text.trim();
-    else if (keyLower === 'phone') session.userData.phone = text.trim();
-    else if (keyLower === 'email') session.userData.email = text.trim();
-    else if (keyLower === 'address') session.userData.address = text.trim();
-    else if (keyLower === 'transport') session.userData.transport = text.trim() as 'MMM' | 'VEHICLE' | 'BOTH';
-    else if (keyLower === 'bank') session.userData.bank = text.trim() as 'EURO_BANK' | 'ALPHA_BANK' | 'PIRAEUS_BANK' | 'NATION_ALBANK';
-    else if (keyLower === 'drlicence') session.userData.drLicence = text.trim() as 'YES' | 'NO';
+    // Update the answer using centralized method
+    this.updateUserDataField(session, editingKey, text.trim());
     
     // Clear editing state and return to review
     delete session.editingKey;
@@ -556,9 +515,11 @@ export class RegistrationFlow {
         '', // Column R - COURSE_DATE
       ];
 
+      // Step 1: Save to registration sheet first (most critical)
       const rowIndex = await this.sheetsClient.appendToRegistrationSheet(values);
+      this.logger.info(`User ${userId} saved to registration sheet at row ${rowIndex}`);
       
-      // Add user to WORKERS sheet with initial status "WAITING"
+      // Step 2: Add to workers sheet (secondary)
       try {
         await this.sheetsClient.addToWorkersSheet(
           session.userData.name,
@@ -569,13 +530,13 @@ export class RegistrationFlow {
         this.logger.info(`User ${userId} added to WORKERS sheet with status WAITING`);
       } catch (workersError) {
         this.logger.error(`Failed to add user ${userId} to WORKERS sheet:`, workersError);
-        // Don't fail the registration if adding to WORKERS sheet fails
+        // Registration is still successful even if workers sheet fails
       }
       
-      // Update session
+      // Step 3: Update session state
       this.sessionManager.updateSession(userId, { currentStep: RegistrationStep.VALIDATION_COMPLETE });
       
-      // Send admin notification
+      // Step 4: Send admin notification (non-critical)
       try {
         await this.adminNotificationService.notifyAdminsOfNewCandidate(
           session.userData.name,
@@ -583,11 +544,10 @@ export class RegistrationFlow {
           session.language,
           rowIndex
         );
-        
         this.logger.info(`Admin notification sent for user ${userId} at row ${rowIndex}`);
       } catch (adminError) {
         this.logger.error(`Failed to send admin notification for user ${userId}:`, adminError);
-        // Don't fail the registration if admin notification fails
+        // Registration is still successful even if notification fails
       }
       
       // Send success message
@@ -668,7 +628,62 @@ export class RegistrationFlow {
       
     } catch (error) {
       this.logger.error(`Error saving registration for user ${userId}:`, error);
+      // Clean up session on error to prevent user from getting stuck
+      this.sessionManager.removeSession(userId);
       await this.bot.sendMessage(chatId, 'Error saving registration. Please try again.');
+    }
+  }
+
+  /**
+   * Clean up event listeners to prevent memory leaks
+   */
+  public cleanup(): void {
+    if (this.callbackQueryHandler) {
+      this.bot.removeListener('callback_query', this.callbackQueryHandler);
+    }
+    if (this.messageHandler) {
+      this.bot.removeListener('message', this.messageHandler);
+    }
+    this.logger.info('RegistrationFlow: Event listeners cleaned up');
+  }
+
+  /**
+   * Clean up old sessions to prevent memory buildup
+   */
+  public cleanupOldSessions(maxAgeHours: number = 24): void {
+    this.sessionManager.cleanupOldSessions(maxAgeHours);
+  }
+
+  /**
+   * Update user data field - centralized method to avoid duplication
+   */
+  private updateUserDataField(session: any, key: string, value: string): void {
+    const fieldMap: { [key: string]: keyof typeof session.userData } = {
+      'NAME': 'name',
+      'AGE': 'age', 
+      'PHONE': 'phone',
+      'EMAIL': 'email',
+      'ADDRESS': 'address',
+      'TRANSPORT': 'transport',
+      'BANK': 'bank',
+      'DRLICENCE': 'drLicence'
+    };
+
+    const fieldName = fieldMap[key];
+    if (fieldName && session.userData[fieldName] !== undefined) {
+      // Type-safe assignment with proper casting
+      if (key === 'TRANSPORT') {
+        session.userData[fieldName] = value as 'MMM' | 'VEHICLE' | 'BOTH';
+      } else if (key === 'BANK') {
+        session.userData[fieldName] = value as 'EURO_BANK' | 'ALPHA_BANK' | 'PIRAEUS_BANK' | 'NATION_ALBANK';
+      } else if (key === 'DRLICENCE') {
+        session.userData[fieldName] = value as 'YES' | 'NO';
+      } else {
+        session.userData[fieldName] = value;
+      }
+      this.logger.info(`✅ SAVED ${key} - User ${session.userId}: "${value}"`);
+    } else {
+      this.logger.warn(`⚠️ UNKNOWN FIELD - User ${session.userId}: Unknown field "${key}" with value "${value}"`);
     }
   }
 
