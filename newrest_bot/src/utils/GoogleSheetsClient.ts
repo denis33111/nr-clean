@@ -147,9 +147,17 @@ export class GoogleSheetsClient {
 
   async getRegistrationSheet(): Promise<string[][]> {
     try {
+      // First, let's list all sheets to see what's available
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: this.spreadsheetId
+      });
+      
+      const sheetNames = spreadsheet.data.sheets?.map(sheet => sheet.properties?.title) || [];
+      this.logger.info('Available sheets:', sheetNames);
+      
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
-        range: 'Registration!A:T'
+        range: 'REGISTRATION!A:T'
       });
 
       return response.data.values || [];
