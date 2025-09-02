@@ -13,16 +13,39 @@ export class GoogleSheetsClient {
 
   async initialize(): Promise<void> {
     try {
-      // Try to get credentials from environment variable first
+      // Try to get credentials from environment variables
       let credentials: any;
       
       // DEBUG: Log what we're receiving
-      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON exists:', !!process.env['GOOGLE_CREDENTIALS_JSON']);
+      this.logger.info('DEBUG: GOOGLE_PRIVATE_KEY exists:', !!process.env['GOOGLE_PRIVATE_KEY']);
+      this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_EMAIL exists:', !!process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL']);
       this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_PATH exists:', !!process.env['GOOGLE_SERVICE_ACCOUNT_PATH']);
-      this.logger.info('DEBUG: GOOGLE_SERVICE_ACCOUNT_PATH value:', process.env['GOOGLE_SERVICE_ACCOUNT_PATH'] || 'NOT SET');
+      this.logger.info('DEBUG: GOOGLE_CREDENTIALS_JSON exists:', !!process.env['GOOGLE_CREDENTIALS_JSON']);
       
-      if (process.env['GOOGLE_SERVICE_ACCOUNT_PATH']) {
-        // Use file path method (for Render with uploaded file)
+      if (process.env['GOOGLE_PRIVATE_KEY'] && process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL']) {
+        // Use individual environment variables (for Render)
+        this.logger.info('DEBUG: Using Google credentials from individual environment variables');
+        
+        credentials = {
+          type: 'service_account',
+          project_id: 'newrest-465515',
+          private_key_id: '57e8bc3dee7efc0f3f1cee40949ba45a44179c5d',
+          private_key: process.env['GOOGLE_PRIVATE_KEY'],
+          client_email: process.env['GOOGLE_SERVICE_ACCOUNT_EMAIL'],
+          client_id: '110694577902197703065',
+          auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+          token_uri: 'https://oauth2.googleapis.com/token',
+          auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+          client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/newresttelegrambotservice%40newrest-465515.iam.gserviceaccount.com',
+          universe_domain: 'googleapis.com'
+        };
+        
+        this.logger.info('DEBUG: Successfully created credentials object from environment variables');
+        this.logger.info('DEBUG: Credentials type:', credentials.type);
+        this.logger.info('DEBUG: Credentials client_email:', credentials.client_email);
+        this.logger.info('DEBUG: Credentials project_id:', credentials.project_id);
+      } else if (process.env['GOOGLE_SERVICE_ACCOUNT_PATH']) {
+        // Use file path method (for local development)
         const keyFile = process.env['GOOGLE_SERVICE_ACCOUNT_PATH'];
         this.logger.info('DEBUG: Using Google credentials from file path:', keyFile);
         
@@ -35,7 +58,7 @@ export class GoogleSheetsClient {
         this.logger.info('Google Sheets client initialized successfully with file path method');
         return;
       } else if (process.env['GOOGLE_CREDENTIALS_JSON']) {
-        // Fallback to environment variable (for local development)
+        // Fallback to JSON environment variable
         try {
           credentials = JSON.parse(process.env['GOOGLE_CREDENTIALS_JSON']);
           this.logger.info('DEBUG: Successfully parsed credentials JSON');
@@ -50,7 +73,7 @@ export class GoogleSheetsClient {
           throw new Error('Invalid GOOGLE_CREDENTIALS_JSON format');
         }
       } else {
-        throw new Error('Either GOOGLE_SERVICE_ACCOUNT_PATH or GOOGLE_CREDENTIALS_JSON environment variable is required');
+        throw new Error('Either GOOGLE_PRIVATE_KEY + GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PATH, or GOOGLE_CREDENTIALS_JSON environment variable is required');
       }
       
       // Use credentials object directly
