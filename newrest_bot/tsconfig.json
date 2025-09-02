@@ -1,4 +1,5 @@
 {
+  // TypeScript configuration for Node.js project
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
