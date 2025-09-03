@@ -333,6 +333,15 @@ export class Bot {
       if (message.text === '/start') {
         await this.handleStartCommand(message);
       }
+      // Handle /pending2 command
+      else if (message.text === '/pending2') {
+        await this.adminStep2Flow.handlePending2Command(message);
+      }
+      // Handle /testreminder command
+      else if (message.text === '/testreminder') {
+        this.logger.info('[Bot] Test reminder command triggered');
+        await this.bot.sendMessage(message.chat.id, '✅ Test reminder command received. Reminders are now handled automatically every 5 minutes.');
+      }
       // Handle other commands and messages
       else if (message.text) {
         // For now, just log other messages - we can expand this later
