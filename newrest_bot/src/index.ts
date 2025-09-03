@@ -13,6 +13,7 @@ async function main() {
     // Initialize logger
     const logger = new Logger();
     logger.info('Starting Newrest Worker Bot...');
+    console.log('🚀🚀🚀 FORCE REBUILD - NEW VERSION 🚀🚀🚀');
 
     // Initialize Google Sheets client
     console.log('🔥🔥🔥 ABOUT TO CREATE GoogleSheetsClient 🔥🔥🔥');
