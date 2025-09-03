@@ -43,10 +43,10 @@ async function main() {
       });
       
       // Webhook endpoint for Telegram
-      app.post('/webhook', (req, res) => {
+      app.post('/webhook', async (req, res) => {
         try {
           const update = req.body;
-          bot.handleWebhookUpdate(update);
+          await bot.handleWebhookUpdate(update);
           res.status(200).send('OK');
         } catch (error) {
           logger.error('Error handling webhook:', error);

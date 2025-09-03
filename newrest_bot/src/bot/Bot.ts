@@ -312,34 +312,38 @@ export class Bot {
   }
 
   // Method to handle webhook updates from Express
-  handleWebhookUpdate(update: any): void {
+  async handleWebhookUpdate(update: any): Promise<void> {
     try {
       // Handle all types of updates
       if (update.message) {
         // Handle text messages and commands
-        this.handleMessage(update.message);
+        await this.handleMessage(update.message);
       } else if (update.callback_query) {
         // Handle button clicks and callback queries
-        this.handleCallbackQuery(update.callback_query);
+        await this.handleCallbackQuery(update.callback_query);
       }
     } catch (error) {
       this.logger.error('Error handling webhook update:', error);
     }
   }
 
-  private handleMessage(message: any): void {
-    // Handle /start command
-    if (message.text === '/start') {
-      this.handleStartCommand(message);
-    }
-    // Handle other commands and messages
-    else if (message.text) {
-      // For now, just log other messages - we can expand this later
-      this.logger.info('Message received:', message.text);
-    }
-    // Handle location messages
-    else if (message.location) {
-      this.handleLocationMessage(message);
+  private async handleMessage(message: any): Promise<void> {
+    try {
+      // Handle /start command
+      if (message.text === '/start') {
+        await this.handleStartCommand(message);
+      }
+      // Handle other commands and messages
+      else if (message.text) {
+        // For now, just log other messages - we can expand this later
+        this.logger.info('Message received:', message.text);
+      }
+      // Handle location messages
+      else if (message.location) {
+        await this.handleLocationMessage(message);
+      }
+    } catch (error) {
+      this.logger.error('Error handling message:', error);
     }
   }
 
