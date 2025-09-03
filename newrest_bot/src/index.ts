@@ -27,9 +27,12 @@ async function main() {
     
     // Check if webhook URL is configured
     const webhookUrl = process.env['WEBHOOK_URL'];
+    logger.info(`WEBHOOK_URL environment variable: ${webhookUrl ? 'SET' : 'NOT SET'}`);
+    logger.info(`WEBHOOK_URL value: ${webhookUrl}`);
     
     if (webhookUrl) {
       // Production: Set up Express server for webhook
+      logger.info('Starting bot in WEBHOOK mode');
       const app = express();
       const PORT = parseInt(process.env['PORT'] || '10000', 10);
       
@@ -48,7 +51,18 @@ async function main() {
           webhookUrl: process.env['WEBHOOK_URL'],
           botToken: process.env['BOT_TOKEN'] ? 'SET' : 'NOT SET',
           googleSheetsId: process.env['GOOGLE_SHEETS_ID'] ? 'SET' : 'NOT SET',
-          environment: process.env['NODE_ENV'] || 'development'
+          environment: process.env['NODE_ENV'] || 'development',
+          port: process.env['PORT'],
+          allEnvVars: Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('BOT') || key.includes('WEBHOOK'))
+        });
+      });
+      
+      // Test endpoint to verify webhook handling
+      app.get('/test-webhook', (_req, res) => {
+        res.status(200).json({ 
+          message: 'Webhook endpoint is accessible',
+          timestamp: new Date().toISOString(),
+          webhookUrl: process.env['WEBHOOK_URL']
         });
       });
       
@@ -56,7 +70,9 @@ async function main() {
       app.post('/webhook', async (req, res) => {
         try {
           const update = req.body;
+          logger.info('Webhook received:', JSON.stringify(update, null, 2));
           await bot.handleWebhookUpdate(update);
+          logger.info('Webhook processed successfully');
           res.status(200).send('OK');
         } catch (error) {
           logger.error('Error handling webhook:', error);
@@ -74,6 +90,7 @@ async function main() {
       logger.info('Bot started with webhook mode');
     } else {
       // Local development: Start bot with polling
+      logger.info('Starting bot in POLLING mode (local development)');
       await bot.start();
       logger.info('Bot started with polling mode (local development)');
     }
