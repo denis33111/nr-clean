@@ -258,7 +258,10 @@ export class Bot {
 
   async start(): Promise<void> {
     try {
-      const webhookUrl = process.env.WEBHOOK_URL || `https://telegram-bot-5kmf.onrender.com/webhook`;
+      const webhookUrl = process.env.WEBHOOK_URL;
+      if (!webhookUrl) {
+        throw new Error('WEBHOOK_URL environment variable is required');
+      }
       await this.bot.setWebHook(webhookUrl);
       
       // Set commands for both working users and admins
