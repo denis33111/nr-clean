@@ -42,6 +42,16 @@ async function main() {
         res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
       });
       
+      // Debug endpoint to check environment variables
+      app.get('/debug', (_req, res) => {
+        res.status(200).json({ 
+          webhookUrl: process.env['WEBHOOK_URL'],
+          botToken: process.env['BOT_TOKEN'] ? 'SET' : 'NOT SET',
+          googleSheetsId: process.env['GOOGLE_SHEETS_ID'] ? 'SET' : 'NOT SET',
+          environment: process.env['NODE_ENV'] || 'development'
+        });
+      });
+      
       // Webhook endpoint for Telegram
       app.post('/webhook', async (req, res) => {
         try {
