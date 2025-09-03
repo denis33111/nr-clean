@@ -289,6 +289,10 @@ export class Bot {
       
       const webhookUrl = process.env['WEBHOOK_URL'];
       
+      // DEBUG: Log what we're actually reading
+      this.logger.info(`DEBUG: Reading WEBHOOK_URL from environment: ${webhookUrl}`);
+      this.logger.info(`DEBUG: All environment variables with WEBHOOK: ${JSON.stringify(Object.keys(process.env).filter(key => key.includes('WEBHOOK')))}`);
+      
       if (webhookUrl) {
         // Production: Set webhook
         await this.bot.setWebHook(webhookUrl);
