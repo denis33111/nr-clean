@@ -1,6 +1,6 @@
 {
   "name": "newrest-worker-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Telegram bot for worker registration and check-in/out system",
   "main": "dist/index.js",
   "scripts": {

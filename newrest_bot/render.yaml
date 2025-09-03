@@ -20,7 +20,7 @@ services:
         value: /etc/secrets/newrest-465515-64b89bbce530.json
       - key: FORCE_REBUILD
         value: "true"
-    buildCommand: npm install && npm run build
+    buildCommand: rm -rf node_modules package-lock.json && npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
