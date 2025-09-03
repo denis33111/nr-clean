@@ -3,7 +3,12 @@
 # Server Monitoring Script for Telegram Bot
 # Run this script to check if your server is alive and healthy
 
-SERVER_URL="${WEBHOOK_URL:-https://telegram-bot-5kmf.onrender.com}"
+SERVER_URL="${WEBHOOK_URL}"
+if [ -z "$SERVER_URL" ]; then
+  echo "ERROR: WEBHOOK_URL environment variable is required"
+  exit 1
+fi
+SERVER_URL="${SERVER_URL%/webhook}"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 echo "🔍 Server Health Check - $TIMESTAMP"

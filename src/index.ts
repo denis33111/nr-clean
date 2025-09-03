@@ -166,7 +166,12 @@ async function main() {
       keepAliveCount++;
       const timestamp = new Date().toISOString();
       
-      fetch(`${process.env.WEBHOOK_URL?.replace('/webhook', '') || 'https://telegram-bot-5kmf.onrender.com'}/health`)
+      const baseUrl = process.env.WEBHOOK_URL?.replace('/webhook', '');
+      if (!baseUrl) {
+        console.log('WEBHOOK_URL not set, skipping health check');
+        return;
+      }
+      fetch(`${baseUrl}/health`)
         .then(async (response) => {
           const responseTime = Date.now();
           const responseData = await response.json() as { status: string; uptime: number };
