@@ -15,8 +15,11 @@ async function main() {
     logger.info('Starting Newrest Worker Bot...');
 
     // Initialize Google Sheets client
+    console.log('🔥🔥🔥 ABOUT TO CREATE GoogleSheetsClient 🔥🔥🔥');
     const sheetsClient = new GoogleSheetsClient();
+    console.log('🔥🔥🔥 ABOUT TO CALL initialize() 🔥🔥🔥');
     await sheetsClient.initialize();
+    console.log('🔥🔥🔥 initialize() COMPLETED 🔥🔥🔥');
 
     // Initialize bot
     const bot = new Bot(logger, sheetsClient);
