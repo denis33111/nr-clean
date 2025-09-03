@@ -87,7 +87,7 @@ async function main() {
       
       // Start bot with webhook
       await bot.start();
-      logger.info('Bot started with webhook mode');
+      logger.info('Bot started with webhook mode - DEPLOYMENT CHECK v2');
     } else {
       // Local development: Start bot with polling
       logger.info('Starting bot in POLLING mode (local development)');
