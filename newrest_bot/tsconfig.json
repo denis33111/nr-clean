@@ -25,10 +25,7 @@
     "noImplicitReturns": false,
     "noImplicitThis": false,
     "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "node": {
-      "types": ["node"]
-    }
+    "noUnusedParameters": false
   },
   "include": [
     "src/**/*"
