@@ -234,8 +234,10 @@ async function main() {
     // Update webhook endpoint to use bot handler
     app.post('/webhook', express.json(), (req, res) => {
       try {
+        console.log('[DEBUG] Webhook received update:', JSON.stringify(req.body, null, 2));
         // Process the update through the bot
         bot.handleWebhookUpdate(req.body);
+        console.log('[DEBUG] Webhook update processed successfully');
         res.sendStatus(200);
       } catch (error) {
         console.error('Webhook error:', error);
