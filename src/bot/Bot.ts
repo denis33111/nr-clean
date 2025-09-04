@@ -43,7 +43,13 @@ export class Bot {
     this.sheetsClient = sheetsClient;
     
     // Initialize bot with webhook for Render.com
-    this.bot = new TelegramBot(token, { webHook: { port: 3000 } });
+    this.bot = new TelegramBot(token, { 
+      webHook: { 
+        port: 3000,
+        host: '0.0.0.0'
+      },
+      polling: false
+    });
 
     // Patch answerCallbackQuery globally to ignore "query is too old" errors
     const originalAnswer = this.bot.answerCallbackQuery.bind(this.bot);
