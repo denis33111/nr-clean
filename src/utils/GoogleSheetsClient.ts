@@ -122,8 +122,8 @@ export class GoogleSheetsClient {
       // If WORKERS sheet fails, try to access main sheet as fallback
       try {
         console.log('[GoogleSheetsClient] Falling back to main sheet for worker data');
-        const mainSheetRows = await this.getRows("'Φύλλο1'!A3:Z1000");
-        const mainSheetHeader = await this.getHeaderRow("'Φύλλο1'!A2:Z2");
+        const mainSheetRows = await this.getRows("'REGISTRATION'!A3:Z1000");
+        const mainSheetHeader = await this.getHeaderRow("'REGISTRATION'!A2:Z2");
         
         // Find relevant columns in main sheet
         const nameCol = mainSheetHeader.findIndex(h => h === 'NAME');

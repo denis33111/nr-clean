@@ -166,8 +166,8 @@ export class MessageHandler {
       }
       
       // Fallback to old method if not found in WORKERS sheet
-      const header = await this.sheets.getHeaderRow("'Φύλλο1'!A2:Z2");
-      const rows = await this.sheets.getRows("'Φύλλο1'!A3:Z1000");
+      const header = await this.sheets.getHeaderRow("'REGISTRATION'!A2:Z2");
+      const rows = await this.sheets.getRows("'REGISTRATION'!A3:Z1000");
       
       const statusColumnIndex = header.findIndex(h => h === 'STATUS');
       
