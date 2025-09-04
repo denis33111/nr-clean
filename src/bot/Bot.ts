@@ -1,3 +1,4 @@
+// @ts-ignore
 import TelegramBot from 'node-telegram-bot-api';
 import { Database } from '../database/Database';
 import { Logger } from '../utils/Logger';
@@ -5,6 +6,11 @@ import { GoogleSheetsClient } from '../utils/GoogleSheetsClient';
 import { CommandHandler } from './CommandHandler';
 import { MessageHandler } from './MessageHandler';
 import { CallbackQueryHandler } from './CallbackQueryHandler';
+
+// Node.js globals
+declare const process: any;
+declare const console: any;
+declare const setInterval: any;
 
 export class Bot {
   private bot: TelegramBot;
@@ -94,7 +100,7 @@ export class Bot {
     // Instead, we handle everything through the webhook system
 
     // Handle errors
-    this.bot.on('error', (error) => {
+    this.bot.on('error', (error: any) => {
       this.logger.error('Bot error:', error);
     });
 
