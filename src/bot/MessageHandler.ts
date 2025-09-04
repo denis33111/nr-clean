@@ -884,9 +884,6 @@ Is there something specific about the hiring process you need help with?
     };
     
     await this.bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
-    
-    // Send persistent contact button
-    await this.sendPersistentContactButton(chatId);
   }
   
   // Send persistent contact button to user

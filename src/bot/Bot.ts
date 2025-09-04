@@ -217,8 +217,6 @@ export class Bot {
         try {
           if ((this as any).candidateStep1Flow) {
             await (this as any).candidateStep1Flow.handleStartCommand(msg);
-            // Send persistent contact button after starting the flow
-            await this.sendPersistentContactButton(chatId);
             return;
           } else {
             console.error('[DEBUG] CandidateStep1Flow not initialized');
