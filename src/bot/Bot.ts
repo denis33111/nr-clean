@@ -268,6 +268,11 @@ export class Bot {
       if (!webhookUrl) {
         throw new Error('WEBHOOK_URL environment variable is required');
       }
+      
+      // Delete webhook first
+      await this.bot.deleteWebHook();
+      
+      // Set webhook
       await this.bot.setWebHook(webhookUrl);
       
       // Set commands for both working users and admins
