@@ -381,9 +381,6 @@ export class CandidateStep1Flow {
         ]
       }
     });
-    
-    // Send persistent contact button
-    await this.sendPersistentContactButton(chatId);
   }
   
   // Send persistent contact button to user

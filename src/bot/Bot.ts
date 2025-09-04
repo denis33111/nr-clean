@@ -155,16 +155,6 @@ export class Bot {
     return this.bot;
   }
 
-  // Send persistent contact button to user
-  private async sendPersistentContactButton(chatId: number): Promise<void> {
-    try {
-      await this.bot.sendMessage(chatId, "📱 Need help? Contact me anytime! Tap the button below to open a chat with @DenisZgl", {
-        reply_markup: this.persistentContactKeyboard
-      });
-    } catch (error) {
-      console.error('[Bot] Error sending persistent contact button:', error);
-    }
-  }
 
   private async routeMessage(msg: TelegramBot.Message): Promise<void> {
     const userId = msg.from!.id;

@@ -886,25 +886,6 @@ Is there something specific about the hiring process you need help with?
     await this.bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
   }
   
-  // Send persistent contact button to user
-  private async sendPersistentContactButton(chatId: number): Promise<void> {
-    try {
-      const contactKeyboard = {
-        keyboard: [[
-          { text: "📱 Contact @DenisZgl", request_contact: false }
-        ]],
-        resize_keyboard: true,
-        persistent: true,
-        one_time_keyboard: false
-      } as TelegramBot.SendMessageOptions['reply_markup'];
-      
-      await this.bot.sendMessage(chatId, "📱 Need help? Contact me anytime! Tap the button below to open a chat with @DenisZgl", {
-        reply_markup: contactKeyboard
-      });
-    } catch (error) {
-      console.error('[MessageHandler] Error sending persistent contact button:', error);
-    }
-  }
 
   // Check if user has ongoing check-out session
   public async hasOngoingCheckoutSession(userId: number): Promise<boolean> {
