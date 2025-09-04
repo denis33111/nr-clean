@@ -120,9 +120,9 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colDate = header.findIndex(h => h === 'COURSE_DATE');
     const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colReminder = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
     const colUserId = header.findIndex(h => h === 'user id');
     const colLang = header.findIndex(h => h === 'LANGUAGE');
     const nameIdx = header.findIndex(h => h === 'NAME');
@@ -190,9 +190,9 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colDate = header.findIndex(h => h === 'COURSE_DATE');
     const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colReminder = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
     const colUserId = header.findIndex(h => h === 'user id');
     const colLang = header.findIndex(h => h === 'LANGUAGE');
     const nameIdx = header.findIndex(h => h === 'NAME');
@@ -268,9 +268,9 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colDate = header.findIndex(h => h === 'COURSE_DATE');
     const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colReminder = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
     const colUserId = header.findIndex(h => h === 'user id');
     const colLang = header.findIndex(h => h === 'LANGUAGE');
     const nameIdx = header.findIndex(h => h === 'NAME');
@@ -342,9 +342,9 @@ export class ReminderService {
     if (!rowsRaw || !rowsRaw.length) return;
     const rows = rowsRaw as string[][];
 
-    const colDate = header.findIndex(h => h === 'COURSE DATE');
+    const colDate = header.findIndex(h => h === 'COURSE_DATE');
     const colConfirmed = header.findIndex(h => h === 'COURSECONFIRMED');
-    const colReminder = header.findIndex(h => h === 'REMINDERSENT');
+    const colReminder = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
     const colUserId = header.findIndex(h => h === 'user id');
     const nameIdx = header.findIndex(h => h === 'NAME');
 
@@ -474,7 +474,7 @@ export class ReminderService {
       const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
       const colCandidateName = header.findIndex(h => h === 'NAME');
       const colUserId = header.findIndex(h => h === 'user id');
-      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
+      const colReminderSent = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
 
       if (colCourseDate === -1 || colCandidateName === -1 || colUserId === -1 || colReminderSent === -1) {
         console.log('[ReminderService] Required columns not found for restoring pending reminders.');
@@ -569,7 +569,7 @@ export class ReminderService {
       console.log(`   - Found at index: ${colUserId}`);
       console.log(`   - Header value at that index: '${header[colUserId]}'`);
       
-      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
+      const colReminderSent = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
       console.log(`🔍 [ReminderService] REMINDERSENT column search:`);
       console.log(`   - Looking for exact: 'REMINDERSENT'`);
       console.log(`   - Found at index: ${colReminderSent}`);
@@ -708,7 +708,7 @@ export class ReminderService {
       const colCourseDate = header.findIndex(h => h === 'COURSE DATE');
       const colName = header.findIndex(h => h === 'NAME');
       const colUserId = header.findIndex(h => h === 'user id');
-      const colReminderSent = header.findIndex(h => h === 'REMINDERSENT');
+      const colReminderSent = header.findIndex(h => h === 'PRE_COURSE_REMINDER');
       const colStatus = header.findIndex(h => h === 'STATUS');
       
       console.log('🔍 [ReminderService] Step 7: Column mapping results:');
